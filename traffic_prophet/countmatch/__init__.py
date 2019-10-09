@@ -1,1 +1,1 @@
-"""Pattern matcher for estimating AADTs from short-term traffic counters."""
+"""Pattern matcher to estimate AADTs from short-term traffic counts."""
