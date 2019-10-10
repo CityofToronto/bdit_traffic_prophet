@@ -14,6 +14,15 @@ class TestReadZip:
 
         counts = reader.read_zip(SAMPLE_ZIP)
         assert len(counts) == 8
+        assert ([c.filename for c in counts] ==
+                ['241_4372_2010.txt',
+                 '252_4505_2010.txt',
+                 '410_8108_2010.txt',
+                 '427_8256_2010.txt',
+                 '487_9229_2010.txt',
+                 '890_17700_2010.txt',
+                 '104870_11510_2010.txt',
+                 '446378_2398_2010.txt'])
         assert ([c.centreline_id for c in counts] ==
                 [241, 252, 410, 427, 487, 890, 104870, 446378])
         assert ([c.direction for c in counts] ==
@@ -28,5 +37,6 @@ class TestReadZip:
                 pd.to_datetime('2010-06-09 00:45:00'))
         assert counts[2].data.at[10, 'Count'] == 0
 
+        # Check that reading a non-zip raises an error.
         with pytest.raises(IOError):
             counts = reader.read_zip('./__init__.py')
