@@ -4,7 +4,7 @@ import pandas as pd
 import zipfile
 
 
-class CountData:
+class Count:
     """Stores count data from a single traffic count file."""
 
     def __init__(self, centreline_id, direction, data):
@@ -13,8 +13,8 @@ class CountData:
         self.data = data
 
 
-def read_zip(zipname, fast=True):
-    """Read 15-minute count zip file into CountData objects.
+def read_zip(zipname):
+    """Read 15-minute count zip file into Count objects.
 
     Assumes data is tab-delimited, and centreline ID is 2nd column and
     direction is 3rd column.
@@ -24,26 +24,27 @@ def read_zip(zipname, fast=True):
     if not zipfile.is_zipfile(zipname):
         raise IOError('{0} is not a zip file.'.format(zipname))
 
-    # Cycle through all files in the zip.
+    # Cycle through all files in the zip and append data to a list.
     with zipfile.ZipFile(zipname) as fhz:
-        count_data_list = []
-        # For each file, retrieve data and append it to a list.
+        counts = []
         for fn in fhz.filelist:
+            # Decode centreline ID and direction from first line of file.
             with fhz.open(fn) as fh:
-                # Decode centreline ID and direction from first line of file.
                 first_line = fh.readline().decode('utf8').split('\t')
                 centreline_id = first_line[1]
                 direction = int(first_line[2])
 
-            # Read in data as a pandas DataFrame (can't seek because zip
+            # Reopen file to read as a pandas DataFrame (can't seek because zip
             # decompression streams don't allow it).
             with fhz.open(fn) as fh:
                 data = pd.read_csv(fh, sep='\t', header=None,
                                    usecols=[3, 4], parse_dates=[0, ],
-                                   infer_datetime_format=fast)
+                                   infer_datetime_format=True)
                 data.columns = ['Timestamp', 'Count']
 
-            count_data_list.append(
-                CountData(centreline_id, direction, data))
+            counts.append(
+                Count(centreline_id, direction, data))
 
-    return count_data_list
+    # Sort list by centreline ID.
+    counts.sort(key=lambda cd: cd.centreline_id)
+    return counts
