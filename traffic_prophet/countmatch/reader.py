@@ -8,8 +8,8 @@ class Count:
     """Stores count data from a single traffic count file."""
 
     def __init__(self, centreline_id, direction, data):
-        self.centreline_id = centreline_id
-        self.direction = direction
+        self.centreline_id = int(centreline_id)
+        self.direction = int(direction)
         self.data = data
 
 

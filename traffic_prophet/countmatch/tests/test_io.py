@@ -1,8 +1,9 @@
 import pytest
 import numpy as np
+import pandas as pd
 
 from ...data import SAMPLE_ZIP
-from .. import io
+from .. import reader
 
 
 class TestReadZip:
@@ -11,6 +12,21 @@ class TestReadZip:
         # Also incidently tests CountData object, but that thing's too simple
         # for much to go wrong.
 
-        counts = read_zip(SAMPLE_ZIP)
-        assert len(data) == 8
-        assert [count.centreline_id for count in counts]
+        counts = reader.read_zip(SAMPLE_ZIP)
+        assert len(counts) == 8
+        assert ([c.centreline_id for c in counts] ==
+                [241, 252, 410, 427, 487, 890, 104870, 446378])
+        assert ([c.direction for c in counts] ==
+                [-1 for i in range(len(counts))])
+        assert ([c.data.shape for c in counts] ==
+                [(288, 2), (96, 2), (96, 2), (96, 2), (288, 2),
+                 (27072, 2), (30912, 2), (10752, 2)])
+        assert np.array_equal(
+            counts[2].data.dtypes.values,
+            np.array([np.dtype('<M8[ns]'), np.dtype('int64')]))
+        assert (counts[2].data.at[3, 'Timestamp'] ==
+                pd.to_datetime('2010-06-09 00:45:00'))
+        assert counts[2].data.at[10, 'Count'] == 0
+
+        with pytest.raises(IOError):
+            counts = reader.read_zip('./__init__.py')
