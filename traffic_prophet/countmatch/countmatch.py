@@ -37,12 +37,12 @@ class ADTCount(Count):
         # count needs to have all 12 months and a sufficient number of total
         # days represented, not be from HW401 and not be excluded by the user
         # in the config file.
-        if ((rc.data.shape[0] >= cfg.cm['min_permanent_stn_days'] * 96):
+        if (rc.data.shape[0] >= cfg.cm['min_permanent_stn_days'] * 96):
             excluded_pos_files = (
-                rc.direction = 1 and
+                rc.direction == 1 and
                 rc.centreline_id in cfg.cm['exclude_ptc_pos'])
             excluded_neg_files = (
-                rc.direction = -1 and
+                rc.direction == -1 and
                 rc.centreline_id in cfg.cm['exclude_ptc_neg'])
             if (not excluded_pos_files and not excluded_neg_files and
                     're' not in rc.filename):
@@ -57,7 +57,7 @@ class ADTCount(Count):
 
         # If duplicate timestamps exist, use the arithmetic mean of the counts.
         # Regardless, convert counts to floating point.
-        if c.data['Timestamp'].duplicated().sum():
+        if crd.data['Timestamp'].duplicated().sum():
             # groupby sorts keys by default.
             crd = (crd.groupby('Timestamp')['Count']
                    .mean())
@@ -95,5 +95,3 @@ class ADTCount(Count):
 #     raise ValueError("no count file has more than the "
 #                      "minimum number of rows, {0}.  Check "
 #                      "input data.".format(cfg.cm['min_stn_count']))
-
-
