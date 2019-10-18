@@ -3,7 +3,14 @@
 import pandas as pd
 import zipfile
 
-from .countmatch import Count
+
+class Count:
+    """Base class for all counts."""
+
+    def __init__(self, centreline_id, direction, data):
+        self.centreline_id = int(centreline_id)
+        self.direction = int(direction)
+        self.data = data
 
 
 class RawCount(Count):
@@ -39,8 +46,8 @@ def read_zip(zipname):
             # decompression streams don't allow it).
             with fhz.open(fn) as fh:
                 data = pd.read_csv(fh, sep='\t', header=None,
-                                       usecols=[3, 4], parse_dates=[0, ],
-                                       infer_datetime_format=True)
+                                   usecols=[3, 4], parse_dates=[0, ],
+                                   infer_datetime_format=True)
                 data.columns = ['Timestamp', 'Count']
 
             counts.append(

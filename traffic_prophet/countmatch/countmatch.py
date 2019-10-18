@@ -7,16 +7,7 @@ from . import reader
 from .. import cfg
 
 
-class Count:
-    """Base class for all counts."""
-
-    def __init__(self, centreline_id, direction, data):
-        self.centreline_id = int(centreline_id)
-        self.direction = int(direction)
-        self.data = data
-
-
-class DailyCount(Count):
+class DailyCount(reader.Count):
     """Storage for total and average daily traffic."""
 
     def __init__(self, centreline_id, direction, data,
@@ -27,7 +18,7 @@ class DailyCount(Count):
     @staticmethod
     def regularize_timeseries(rc):
         """Regularize a RawCount object's data.
-        
+
         Copy's the object's count data and averages out observations with
         duplicate timestamps.
 
@@ -38,7 +29,17 @@ class DailyCount(Count):
         """
 
         crd = rc.data.copy()
-        crd['Timestamp'] = crd['Timestamp'].apply(cls._round_timestamp)
+
+        def round_timestamp(timestamp):
+            # timestamp must be pandas.Timestamp.
+            seconds_after_hour = timestamp.minute * 60 + timestamp.second
+            if seconds_after_hour % 900:
+                ds = int(np.round(
+                    seconds_after_hour / 900.)) * 900 - seconds_after_hour
+                return timestamp + np.timedelta64(ds)
+            return timestamp
+
+        crd['Timestamp'] = crd['Timestamp'].apply(round_timestamp)
 
         # If duplicate timestamps exist, use the arithmetic mean of the counts.
         # Regardless, convert counts to floating point.
@@ -50,7 +51,7 @@ class DailyCount(Count):
         else:
             crd.sort_values('Timestamp', inplace=True)
             crd['Count'] = crd['Count'].astype(np.float64)
-        
+
         # Required for calculating averaged data.
         crd['Date'] = crd['Timestamp'].dt.date
         # These are only used if the count is from a permanent station, but
@@ -60,16 +61,6 @@ class DailyCount(Count):
         crd['Day of Week'] = crd['Timestamp'].dt.dayofweek
 
         return crd
-
-    @staticmethod
-    def _round_timestamp(timestamp):
-        # Rounds timestamp to nearest 15 minutes.
-        seconds_after_hour = timestamp.minute * 60 + timestamp.second
-        if seconds_after_hour % 900:
-            ds = int(np.round(
-                seconds_after_hour / 900.)) * 900 - seconds_after_hour
-            return timestamp + np.timedelta64(ds)
-        return timestamp
 
     @staticmethod
     def is_permanent_count(rc):
@@ -136,7 +127,7 @@ class DailyCount(Count):
         # Calculate day-of-week of month ADT.
         crd_date = (crd.groupby(['Date', 'Month', 'Day of Week'])['Count']
                     .agg(['sum', 'count'])
-                    .reset_index(level=(1,2)))
+                    .reset_index(level=(1, 2)))
         # Drop any days with incomplete data.
         crd_date = crd_date.loc[crd_date['count'] == 96, :]
         crd_dom = crd_date.groupby(['Month', 'Day of Week'])
@@ -179,12 +170,12 @@ class DailyCount(Count):
         return cls(rc.centreline_id, rc.direction, daily_count)
 
 
-def countmatch(source):
+def countmatch(sources):
     """Calculates AADTs from counts.
 
     Parameters
     ----------
-    source : str
+    sources : str
         Path and filename of the zip file containing count data.
     """
 

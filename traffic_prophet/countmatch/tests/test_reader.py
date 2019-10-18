@@ -6,7 +6,7 @@ from ...data import SAMPLE_ZIP
 from .. import reader
 
 
-class TestReadZip:
+class TestReader:
 
     def test_read_zip(self):
         # Also incidently tests CountData object, but that thing's too simple
