@@ -12,6 +12,7 @@ class RawCount(Count):
         super().__init__(centreline_id, direction, data)
         self.filename = filename
 
+
 def read_zip(zipname):
     """Read 15-minute count zip file into Count objects.
 

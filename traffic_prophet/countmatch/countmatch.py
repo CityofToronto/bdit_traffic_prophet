@@ -8,6 +8,7 @@ from .. import cfg
 
 
 class Count:
+    """Base class for all counts."""
 
     def __init__(self, centreline_id, direction, data):
         self.centreline_id = int(centreline_id)
@@ -16,11 +17,49 @@ class Count:
 
 
 class DailyCount(Count):
+    """Storage for total and average daily traffic."""
 
     def __init__(self, centreline_id, direction, data,
                  is_permanent=False):
         super().__init__(centreline_id, direction, data)
         self.is_permanent = bool(is_permanent)
+
+    @staticmethod
+    def regularize_timeseries(rc):
+        """Regularize a RawCount object's data.
+        
+        Copy's the object's count data and averages out observations with
+        duplicate timestamps.
+
+        Parameters
+        ----------
+        rc : RawCount
+            Raw count data object.
+        """
+
+        crd = rc.data.copy()
+        crd['Timestamp'] = crd['Timestamp'].apply(cls._round_timestamp)
+
+        # If duplicate timestamps exist, use the arithmetic mean of the counts.
+        # Regardless, convert counts to floating point.
+        if crd.data['Timestamp'].duplicated().sum():
+            # groupby sorts keys by default.
+            crd = (crd.groupby('Timestamp')['Count']
+                   .mean())
+            crd.reset_index(inplace=True)
+        else:
+            crd.sort_values('Timestamp', inplace=True)
+            crd['Count'] = crd['Count'].astype(np.float64)
+        
+        # Required for calculating averaged data.
+        crd['Date'] = crd['Timestamp'].dt.date
+        # These are only used if the count is from a permanent station, but
+        # leaving here so that `crd` doesn't have to be modified by any other
+        # function.
+        crd['Month'] = crd['Timestamp'].dt.month
+        crd['Day of Week'] = crd['Timestamp'].dt.dayofweek
+
+        return crd
 
     @staticmethod
     def _round_timestamp(timestamp):
@@ -61,7 +100,14 @@ class DailyCount(Count):
         return False
 
     @staticmethod
-    def get_permanent_count_data(crd):
+    def process_count_data(crd):
+        """Calculates total daily traffic from raw count data."""
+        crdg = crd.groupby('Date')
+        return pd.DataFrame({
+            'Daily Count': 96. * crdg['Count'].sum() / crdg['Count'].count()})
+
+    @staticmethod
+    def process_permanent_count_data(crd):
         """Derives AADT, DoMADT and DoM factor values for permanent counts.
 
         Notes
@@ -79,9 +125,6 @@ class DailyCount(Count):
         crd : pandas.DataFrame
             Data from a RawCount object processed within `from_rawcount`.
         """
-
-        crd['Month'] = crd['Timestamp'].dt.month
-        crd['Day of Week'] = crd['Timestamp'].dt.dayofweek
 
         # Calculate MADT.
         crd_m = crd.groupby('Month')
@@ -103,7 +146,7 @@ class DailyCount(Count):
         dom_factor = madt['MADT'].values / domadt
 
         # TO DO: A much simpler way to calculate domadt, consistent with MADT
-        # above, would be: 
+        # above, would be:
         #     crd_dom = crd.groupby(['Date', 'Month'])
         #     domadt = (96. * crd_dom['Count'].sum().unstack() /
         #               crd_dom['Count'].count().unstack())
@@ -112,38 +155,22 @@ class DailyCount(Count):
         # AADT estimated directly from MADT -
         aadt = ((madt['MADT'] * madt['Days in Month']).sum() /
                 madt['Days in Month'].sum())
-        
+
         return {'MADT': madt, 'DoMADT': domadt,
                 'DoM Factor': dom_factor, 'AADT': aadt}
 
     @classmethod
     def from_rawcount(cls, rc):
         # Copy file and round timestamps to the nearest 15 minutes.
-        crd = rc.data.copy()
-        crd['Timestamp'] = crd['Timestamp'].apply(cls._round_timestamp)
+        crd = cls.regularize_timeseries(rc)
 
-        # If duplicate timestamps exist, use the arithmetic mean of the counts.
-        # Regardless, convert counts to floating point.
-        if crd.data['Timestamp'].duplicated().sum():
-            # groupby sorts keys by default.
-            crd = (crd.groupby('Timestamp')['Count']
-                   .mean())
-            crd.reset_index(inplace=True)
-        else:
-            crd.sort_values('Timestamp', inplace=True)
-            crd['Count'] = crd['Count'].astype(np.float64)
+        # Get daily total count values.
+        daily_count = cls.process_count_data(crd)
 
-        # Group by date and obtain estimated daily traffic for each day.
-        crd['Date'] = crd['Timestamp'].dt.date
-        crdg = crd.groupby('Date')
-        daily_count = pd.DataFrame({
-            'Daily Count': 96. * crdg['Count'].sum() / crdg['Count'].count()}
-        )
-
-        # If count is permanent, do some further processing.
+        # If count is permanent, also get MADT, AADT, DoMADT and DoM factors.
         if cls.is_permanent_count(rc):
             # Save to a new object.
-            ptc_data = cls.get_permanent_count_data(crd)
+            ptc_data = cls.process_permanent_count_data(crd)
             ptc_data['Daily Count'] = daily_count
             return cls(rc.centreline_id, rc.direction, ptc_data,
                        is_permanent=True)
