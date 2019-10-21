@@ -50,17 +50,17 @@ class AnnualCount(Count):
             if seconds_after_hour % 900:
                 ds = int(np.round(
                     seconds_after_hour / 900.)) * 900 - seconds_after_hour
-                return timestamp + np.timedelta64(ds)
+                return timestamp + np.timedelta64(ds, 's')
             return timestamp
 
         crd['Timestamp'] = crd['Timestamp'].apply(round_timestamp)
 
         # If duplicate timestamps exist, use the arithmetic mean of the counts.
         # Regardless, convert counts to floating point.
-        if crd.data['Timestamp'].duplicated().sum():
+        if crd['Timestamp'].duplicated().sum():
             # groupby sorts keys by default.
-            crd = (crd.groupby('Timestamp')['Count']
-                   .mean())
+            crd = pd.DataFrame(
+                {'Count': crd.groupby('Timestamp')['Count'].mean()})
             crd.reset_index(inplace=True)
         else:
             crd.sort_values('Timestamp', inplace=True)
@@ -74,6 +74,13 @@ class AnnualCount(Count):
         crd['Day of Week'] = crd['Timestamp'].dt.dayofweek
 
         return crd
+
+    @staticmethod
+    def process_count_data(crd):
+        """Calculates total daily traffic from raw count data."""
+        crdg = crd.groupby('Date')
+        return pd.DataFrame({
+            'Daily Count': 96. * crdg['Count'].sum() / crdg['Count'].count()})
 
     @staticmethod
     def is_permanent_count(rc):
@@ -92,7 +99,7 @@ class AnnualCount(Count):
             is a `pandas.DataFrame` with 'Timestamp' and 'Count' columns.
 
         """
-        n_available_months = rc['data'].dt.month.unique().shape[0]
+        n_available_months = rc['data']['Timestamp'].dt.month.unique().shape[0]
         if (n_available_months == 12 and
                 (rc['data'].shape[0] >=
                  cfg.cm['min_permanent_stn_days'] * 96)):
@@ -103,16 +110,9 @@ class AnnualCount(Count):
                 rc['direction'] == -1 and
                 rc['centreline_id'] in cfg.cm['exclude_ptc_neg'])
             if (not excluded_pos_files and not excluded_neg_files and
-                    're' not in rc.filename):
+                    're' not in rc['filename']):
                 return True
         return False
-
-    @staticmethod
-    def process_count_data(crd):
-        """Calculates total daily traffic from raw count data."""
-        crdg = crd.groupby('Date')
-        return pd.DataFrame({
-            'Daily Count': 96. * crdg['Count'].sum() / crdg['Count'].count()})
 
     @staticmethod
     def process_permanent_count_data(crd):
@@ -285,7 +285,8 @@ class Reader:
                 # Check if file has enough data to return.
                 # TO DO: log a warning if file is insufficient?
                 if self.has_enough_data(data):
-                    yield {'centreline_id': int(centreline_id),
+                    yield {'filename': fn.filename,
+                           'centreline_id': int(centreline_id),
                            'direction': int(direction),
                            'data': data,
                            'year': data.at[0, 'Timestamp'].year}
