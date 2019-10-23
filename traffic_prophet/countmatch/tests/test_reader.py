@@ -280,4 +280,4 @@ class TestReader:
         with pytest.raises(IOError):
             path = "/".join(SAMPLE_ZIP['2010'].split("/")[:-1]) + "/"
             rdr = reader.Reader(path + 'count_lonlat.csv')
-            counts = rdr.read_zip()
+            rdr.read_zip()
