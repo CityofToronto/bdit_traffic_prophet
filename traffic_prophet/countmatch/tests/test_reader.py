@@ -91,13 +91,13 @@ class TestAnnualCount:
                 crd['Count'].sum())
         # 2010 is not a leap year.
         assert po_m['Days in Month'].sum() == 365
- 
+
         # Every month and day of week must be included in domadt.
         assert po['DoMADT'].shape == (12, 7)
         n_dom = (crd.groupby(['Month', 'Day of Week'])['Count']
                  .count().unstack() // 96)
         sum_dom = (crd.groupby(['Month', 'Day of Week'])['Count']
-                  .sum().unstack())
+                   .sum().unstack())
         assert np.allclose(po['DoMADT'] * n_dom, sum_dom,
                            rtol=1e-10, equal_nan=True)
 
@@ -121,7 +121,7 @@ class TestAnnualCount:
                  po['MADT']['Days in Month']).sum() /
                 po['MADT']['Days in Month'].sum())
         assert np.isclose(po['AADT'], aadt, rtol=1e-10)
-    
+
     def test_from_raw_data(self):
         sttc_ac = reader.AnnualCount.from_raw_data(self.sttc_data)
         assert isinstance(sttc_ac, reader.AnnualCount)
@@ -135,6 +135,7 @@ class TestAnnualCount:
         assert (sorted(ptc_ac.data.keys()) ==
                 sorted(['Daily Count', 'MADT', 'DoMADT',
                         'DoM Factor', 'AADT']))
+
 
 class TestReader:
     """Test Reader for reading in sequences of counts."""
@@ -209,11 +210,11 @@ class TestReader:
         assert sorted(ptcs.keys()) == [890, 104870]
         assert (sorted(sttcs.keys()) ==
                 [241, 252, 410, 427, 487, 890, 1978, 446378])
-        
+
         # Check that counts from multiple years are stored under the same key.
         assert len(ptcs[104870]) == 2
         assert len(sttcs[241]) == 2
-        
+
         # Check table integrity.
         assert (counts_2010[0].data['DoMADT']
                 .equals(ptcs[104870][0].data['DoMADT']))
