@@ -2,57 +2,81 @@
 
 import numpy as np
 import pandas as pd
-import statsmodels.formula.api as sm
+import statsmodels.api as sm
 
 from . import reader
 
 
-def exponential_growth_factor(domadt):
-    """Calculate year-on-year exponential growth rate :math:`r`.
+def exponential_factor_fit(year, aadt, ref_vals):
+    """Calculate year-on-year exponential growth rate :math:`r` for ADT.
 
-    ADT for (integer) year :math:`y`, :math:`A_\mathrm{y}` is assumed to follow
+    Parameters
+    ----------
+    year : numpy.ndarray
+        Array of year values.
+    aadt : pandas.DataFrame
+        Array of AADT values.
+    ref_vals : dict containing 'year' and 'aadt' entries.
+        Reference values for normalization.
+    
+    Returns
+    -------
+    r : statsmodels.regression.linear_model.RegressionResultsWrapper
+        Fit results.
+
+    Notes
+    -----
+
+    AADT for year :math:`y`, :math:`A_\mathrm{t}` is assumed to follow
 
     ..math::
         A_\mathrm{y} = A_{y_0} \exp{(r(y - y_0))}
 
-    Where :math:`A_{y_0}` is some baseline ADT and :math:`r` the year-on-year
-    growth rate.
+    Where :math:`A_{y_0}` is some baseline AADT and :math:`r` the growth rate
+    in units of :math:`1 / year`.
 
-    Parameters
-    ----------
-    domadt : pandas.DataFrame
-        DataFrame of day-of-month ADT.
+    See https://www.unescap.org/sites/default/files/Stats_Brief_Apr2015_Issue_07_Average-growth-rate.pdf
+    and https://datahelpdesk.worldbank.org/knowledgebase/articles/906531-methodologies
     """
-    # See https://www.unescap.org/sites/default/files/Stats_Brief_Apr2015_Issue_07_Average-growth-rate.pdf
-    # and https://datahelpdesk.worldbank.org/knowledgebase/articles/906531-methodologies
-    pass
+    # TO DO: consider relaxing the strict requirement that only r be allowed to
+    # vary?
 
-def linear_growth_factor(domadt):
-    """OLS regression to estimate the linear growth rate.
+    # Dependent variable first.
+    # https://www.statsmodels.org/dev/generated/statsmodels.regression.linear_model.OLS.html
+    model = sm.OLS(endog=(np.log(aadt / ref_vals['aadt'])),
+                   exog=(year - ref_vals['year']))
+    results = model.fit()
+    return results
 
-    ADT for (integer) year :math:`y`, :math:`A_\mathrm{y}` is assumed to follow
+
+def linear_factor_fit(week, wadt):
+    """OLS regression to estimate the linear growth rate within a single year.
+
+    ADT for week :math:`t`, :math:`A_\mathrm{t}` is assumed to follow
 
     ..math::
-        A_\mathrm{y} = r(y - y_0) + A_{y_0}
+        A_\mathrm{t} = r(t - t_0) + A_{t_0}
 
-    Where :math:`A_{y_0}` is some baseline ADT and :math:`r` the year-on-year
-    growth rate.
-
-    In practice, used when there is only one year of data.
+    Where :math:`A_{t_0}` is ADT for a reference year and :math:`r` the
+    growth rate in units of :math:`A / week`.
 
     Parameters
     ----------
-    domadt : pandas.DataFrame
-        DataFrame of day-of-month ADT.
-
+    week : numpy.ndarray
+        Array of year values.
+    aadt : pandas.DataFrame
+        Array of AADT values.
+    ref_vals : dict containing 'year' and 'aadt' entries.
+        Reference values for normalization.
+    
+    Returns
+    -------
+    r : statsmodels.regression.linear_model.RegressionResultsWrapper
+        Fit results.
     """
-    y = uberdrivers_all['num_distinct_drivers'].values.astype('float')
-    X = uberdrivers_all['number_of_trips'].values.astype('float')
-    model = sm.ols(formula="y ~ X", data={'X': X, 'y': y})
-    results_lin = model.fit()
-
-    results_lin.summary()
-
+    model = sm.OLS(endog=wadt, exog=sm.add_constant(week))
+    results = model.fit()
+    return results
 
 
 class PermCount(reader.Count):
@@ -61,22 +85,67 @@ class PermCount(reader.Count):
     def __init__(self, centreline_id, direction, data):
         super().__init__(centreline_id, direction, data,
                          is_permanent=True)
-        self.growth = None
+        self.growth_factor = None
+        self.base_year = None
+        self._fit = None
+        self._fit_type = None
 
     @classmethod
     def from_ptc_count_object(cls, ptc):
         # Data will be passed by reference.
         return cls(ptc.centreline_id, ptc.direction, ptc.data)
 
-    def get_growth_factor(self):
-        domadt = self.data['DoMADT']
+    @staticmethod
+    def get_wadt(cdata):
+        cdata = cdata.reset_index()
+        cdata['Start of Week'] = (
+            cdata['Date'] -
+            cdata['Date'].dt.dayofweek * np.timedelta64(1, 'D'))
+        wadt = (cdata.groupby('Start of Week')['Daily Count']
+                .agg(['mean', 'count']))
+        wadt = wadt.loc[wadt['count'] == 7, ('mean',)]
+        wadt.reset_index(inplace=True)
+        wadt.columns = ('Start of Week', 'WADT')
+        wadt['Week'] = wadt['Week Start'].dt.week.astype(float)
+
+    def fit_growth(self):
+        # Modification of Arman
         if len(domadt.index.levels[0]) > 1:
-            self.growth = exponential_growth_factor(domadt)
+            self._fit_type = 'Exponential'
+
+            # Process year vs. AADT data.
+            cdata = self.data['AADT'].reset_index()
+            cdata['Year'] = cdata['Year'].astype(float)
+
+            # Perform exponential fit.
+            self._fit = exponential_factor_fit(
+                cdata['Year'].values,
+                cdata['AADT'].values,
+                {'year': cdata.at[0, 'Year'], 'aadt': cdata.at[0, 'AADT']})
+
+            # Populate growth factor.
+            self.growth_factor = self._fit.params[0]
+            self.base_year = int(cdata.at[0, 'Year'])
         else:
-            self.growth = linear_growth_factor(domadt)
+            self._fit_type = 'Linear'
+
+            # Process week vs. weekly averaged ADT.
+            wadt = self.get_wadt(self.data['Daily Count'])
+            self._fit = linear_factor_fit(wadt['Week'].values,
+                                          wadt['WADT'].values)
+
+            # Convert linear weekly fit to yearly exponential fit (iffy logic).
+            aadt_info = self.data['AADT'].reset_index()
+            self.growth_factor = (self._fit.params[1] * 52. /
+                                  aadt_info['AADT'].values[0])
+            self.base_year = aadt_info['Year'].values[0]
+
+    def predict_growth(self, years):
+        return np.exp(self.growth_factor *
+                      (years.astype(float) - self.base_year))
 
 
 def get_growth_factors(rdr):
     for key in rdr.ptcs.keys():
         rdr.ptcs[key] = PermCount.from_ptc_count_object(rdr.ptcs[key])
-        rdr.ptcs[key].get_growth_factor()
+        rdr.ptcs[key].fit_growth()
