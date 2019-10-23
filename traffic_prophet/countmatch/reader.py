@@ -79,8 +79,14 @@ class AnnualCount(Count):
     def process_count_data(crd):
         """Calculates total daily traffic from raw count data."""
         crdg = crd.groupby('Date')
-        return pd.DataFrame({
+        daily_counts = pd.DataFrame({
             'Daily Count': 96. * crdg['Count'].sum() / crdg['Count'].count()})
+        daily_counts.reset_index(inplace=True)
+        daily_counts['Date'] = pd.to_datetime(daily_counts['Date'])
+        daily_counts.set_index(
+            pd.Index(daily_counts['Date'].dt.dayofyear, name='Day of Year'),
+            inplace=True)
+        return daily_counts
 
     @staticmethod
     def is_permanent_count(rc):
@@ -152,7 +158,7 @@ class AnnualCount(Count):
         domadt = (crd_dom['sum'].sum().unstack() /
                   crd_dom['sum'].count().unstack())
         # Determine DoM conversion factor.  (Uses a numpy broadcasting trick.)
-        dom_factor = madt['MADT'].values / domadt
+        dom_factor = madt['MADT'].values[:, np.newaxis] / domadt
 
         # TO DO: A much simpler way to calculate domadt, consistent with MADT
         # above, would be:
@@ -161,9 +167,8 @@ class AnnualCount(Count):
         #               crd_dom['Count'].count().unstack())
         # We should consider using this instead.
 
-        # AADT estimated directly from MADT -
-        aadt = ((madt['MADT'] * madt['Days in Month']).sum() /
-                madt['Days in Month'].sum())
+        # Weighted average for AADT.
+        aadt = np.average(madt['MADT'], weights=madt['Days in Month'])
 
         return {'MADT': madt, 'DoMADT': domadt,
                 'DoM Factor': dom_factor, 'AADT': aadt}
@@ -224,11 +229,6 @@ class Reader:
     def read(self):
         """Read source data into dictionaries of counts."""
         self._reader()
-
-    @staticmethod
-    def has_enough_data(data):
-        """Checks if there is enough data to be a usable short count count."""
-        return data.shape[0] >= cfg.cm['min_stn_count']
 
     def read_zip(self):
         """Read zip file contents into AnnualCount objects."""
@@ -292,6 +292,11 @@ class Reader:
                            'year': data.at[0, 'Timestamp'].year}
 
     @staticmethod
+    def has_enough_data(data):
+        """Checks if there is enough data to be a usable short count count."""
+        return data.shape[0] >= cfg.cm['min_stn_count']
+
+    @staticmethod
     def append_counts(current_counts, ptcs, sttcs):
         for c in current_counts:
             _appendto = ptcs if c.is_permanent else sttcs
@@ -319,18 +324,21 @@ class Reader:
         """Unify count objects across years.
 
         For each centreline ID in `ptcs`, create data tables for each
-        value and all years.  Works in place
+        value and all years.  Works **in place**, and replaces the index of
+        each table with a MultiIndex.
         """
         # For permanent counts, perform in-place reindexing, then unify each
         # type of data into a dict.
         for cid in ptcs.keys():
             for item in ptcs[cid]:
-                # Create multi-indexes for data in each count object.
+                # Create multi-indexes for data in each count object.  This
+                # action is NOT idempotent, but I prefer this to making copies
+                # of tables.
                 for subkey in ['MADT', 'DoMADT', 'DoM Factor', 'Daily Count']:
                     _ctable = item.data[subkey]
                     _ctable.index = pd.MultiIndex.from_product(
                         [[item.year, ], _ctable.index],
-                        names=['Year', _ctable.index.name[0]])
+                        names=['Year', _ctable.index.name])
             unified_data = {
                 'MADT': pd.concat([c.data['MADT'] for c in ptcs[cid]]),
                 'DoMADT': pd.concat([c.data['DoMADT'] for c in ptcs[cid]]),
@@ -350,8 +358,8 @@ class Reader:
                 _ctable = item.data
                 _ctable.index = pd.MultiIndex.from_product(
                     [[item.year, ], _ctable.index],
-                    names=['Year', _ctable.index.name[0]])
-            unified_data = pd.concat([c.data for c in ptcs[cid]])
-            sttcs[cid] = Count(ptcs[cid][0].centreline_id,
-                               ptcs[cid][0].direction,
+                    names=['Year', _ctable.index.name])
+            unified_data = pd.concat([c.data for c in sttcs[cid]])
+            sttcs[cid] = Count(sttcs[cid][0].centreline_id,
+                               sttcs[cid][0].direction,
                                unified_data, is_permanent=False)
