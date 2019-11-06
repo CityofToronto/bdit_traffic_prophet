@@ -45,8 +45,7 @@ def exponential_factor_fit(year, aadt, ref_vals):
     # https://www.statsmodels.org/dev/generated/statsmodels.regression.linear_model.OLS.html
     model = sm.OLS(endog=(np.log(aadt / ref_vals['aadt'])),
                    exog=(year - ref_vals['year']))
-    results = model.fit()
-    return results
+    return model.fit()
 
 
 def linear_factor_fit(week, wadt):
@@ -75,8 +74,7 @@ def linear_factor_fit(week, wadt):
         Fit results.
     """
     model = sm.OLS(endog=wadt, exog=sm.add_constant(week))
-    results = model.fit()
-    return results
+    return model.fit()
 
 
 class PermCount(reader.Count):
@@ -102,6 +100,8 @@ class PermCount(reader.Count):
 
     def get_wadt(self):
         cdata = self.data['Daily Count'].reset_index()
+        # Overcomplicated groupby using the start of the week, as dt.week
+        # returns the "week ordinal".  See https://stackoverflow.com/a/55890652
         cdata['Start of Week'] = (
             cdata['Date'] -
             cdata['Date'].dt.dayofweek * np.timedelta64(1, 'D'))
@@ -110,7 +110,7 @@ class PermCount(reader.Count):
         wadt = wadt.loc[wadt['count'] == 7, ('mean',)]
         wadt.reset_index(inplace=True)
         wadt.columns = ('Start of Week', 'WADT')
-        wadt['Week'] = wadt['Week Start'].dt.week.astype(float)
+        wadt['Week'] = wadt['Start of Week'].dt.week.astype(float)
         return wadt
 
     def fit_growth(self):
