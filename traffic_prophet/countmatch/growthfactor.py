@@ -68,7 +68,7 @@ def linear_factor_fit(week, wadt):
         Array of AADT values.
     ref_vals : dict containing 'year' and 'aadt' entries.
         Reference values for normalization.
-    
+
     Returns
     -------
     r : statsmodels.regression.linear_model.RegressionResultsWrapper
@@ -95,9 +95,13 @@ class PermCount(reader.Count):
         # Data will be passed by reference.
         return cls(ptc.centreline_id, ptc.direction, ptc.data)
 
-    @staticmethod
-    def get_wadt(cdata):
-        cdata = cdata.reset_index()
+    def get_aadt(self):
+        aadt = self.data['AADT'].reset_index()
+        aadt['Year'] = aadt['Year'].astype(float)
+        return aadt
+
+    def get_wadt(self):
+        cdata = self.data['Daily Count'].reset_index()
         cdata['Start of Week'] = (
             cdata['Date'] -
             cdata['Date'].dt.dayofweek * np.timedelta64(1, 'D'))
@@ -107,30 +111,29 @@ class PermCount(reader.Count):
         wadt.reset_index(inplace=True)
         wadt.columns = ('Start of Week', 'WADT')
         wadt['Week'] = wadt['Week Start'].dt.week.astype(float)
+        return wadt
 
     def fit_growth(self):
-        # Modification of Arman
-        if len(domadt.index.levels[0]) > 1:
+        if len(self.data['DoMADT'].index.levels[0]) > 1:
             self._fit_type = 'Exponential'
 
             # Process year vs. AADT data.
-            cdata = self.data['AADT'].reset_index()
-            cdata['Year'] = cdata['Year'].astype(float)
+            aadt = self.get_aadt()
 
             # Perform exponential fit.
             self._fit = exponential_factor_fit(
-                cdata['Year'].values,
-                cdata['AADT'].values,
-                {'year': cdata.at[0, 'Year'], 'aadt': cdata.at[0, 'AADT']})
+                aadt['Year'].values,
+                aadt['AADT'].values,
+                {'year': aadt.at[0, 'Year'], 'aadt': aadt.at[0, 'AADT']})
 
             # Populate growth factor.
             self.growth_factor = self._fit.params[0]
-            self.base_year = int(cdata.at[0, 'Year'])
+            self.base_year = int(aadt.at[0, 'Year'])
         else:
             self._fit_type = 'Linear'
 
             # Process week vs. weekly averaged ADT.
-            wadt = self.get_wadt(self.data['Daily Count'])
+            wadt = self.get_wadt()
             self._fit = linear_factor_fit(wadt['Week'].values,
                                           wadt['WADT'].values)
 
