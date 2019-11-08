@@ -10,7 +10,9 @@ class NeighbourBase:
         self._n_neighbours = n_neighbours
 
 
-class NeighbourLocalBase(NeighbourBase):
+class NeighbourLonLatBase(NeighbourBase):
+    # TO DO: class methods need to be made robust against data with repeated
+    # IDs or lat-lons, or NaNs.
 
     _r_earth = 6.371e3
     _metric = None
@@ -25,8 +27,14 @@ class NeighbourLocalBase(NeighbourBase):
         # this isn't publicly accessible.
         self._idx_to_id = pd.Series(self._id_to_idx.keys().values,
                                     index=self._id_to_idx.values)
+        # TO DO: should we just calculate neighbours by default?
 
     def lonlat_to_xy(self, lon, lat):
+        """Converts long-lat coordinates to a physical coordinate system.
+
+        The coordinate system is a linearization of a spherical shell, with
+        an origin (0, 0) at the location of 'centre_of_toronto'.
+        """
         lon = np.radians(lon)
         lat = np.radians(lat)
         lon0, lat0 = np.radians(cfg.distances['centre_of_toronto'])
@@ -66,12 +74,12 @@ class NeighbourLocalBase(NeighbourBase):
         self.data['Distances'] = [d[1:] for d in dists]
 
 
-class NeighbourLocalEuclidean(NeighbourLocalBase):
+class NeighbourLonLatEuclidean(NeighbourLonLatBase):
 
     _metric = skln.dist_metrics.EuclideanDistance()
 
 
-class NeighbourLocalManhattan(NeighbourLocalBase):
+class NeighbourLonLatManhattan(NeighbourLonLatBase):
 
     _metric = skln.dist_metrics.ManhattanDistance()
 
