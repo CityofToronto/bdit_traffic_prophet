@@ -18,7 +18,7 @@ cm = {
 
 distances = {
     # Lat-lon of 703 Don Mills.
-    'centre_of_toronto': [43.708975, -79.333536],
+    'centre_of_toronto': [-79.333536, 43.708975],
     # Clockwise angle from due north for Toronto's street grid (measured
     # from Spadina/Lakeshore to Spadina/Dupont).
     'toronto_street_angle_degrees': -16.485518084102
