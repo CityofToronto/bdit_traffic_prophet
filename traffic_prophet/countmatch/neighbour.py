@@ -26,10 +26,10 @@ class NeighbourLocalBase(NeighbourBase):
         self._idx_to_id = pd.Series(self._id_to_idx.keys().values,
                                     index=self._id_to_idx.values)
 
-    def lonlat_to_xy(self, lat, lon):
+    def lonlat_to_xy(self, lon, lat):
         lat = np.radians(lat)
         lon = np.radians(lon)
-        lat0, lon0 = np.radians(cfg.distances['centre_of_toronto'])
+        lon0, lat0 = np.radians(cfg.distances['centre_of_toronto'])
 
         dlat = lat - lat0
         dlon = (lon - lon0) * np.cos(0.5 * (lat + lat0))
