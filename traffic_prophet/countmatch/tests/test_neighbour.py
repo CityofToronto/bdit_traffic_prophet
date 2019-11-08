@@ -8,17 +8,18 @@ from ...data import SAMPLE_LONLAT
 from ... import cfg
 
 
-class TestNeighbourLocalEuclidean:
+class TestNeighbourLonLatEuclidean:
     """Tests Euclidean file-based neighbour finder.  Also tests base class."""
 
     def setup(self):
-        # There are only 10 items, so this is an all-to-all comparison.
-        self.nle = nbr.NeighbourLocalEuclidean(SAMPLE_LONLAT, 9)
+        # There are only 10 items, so this orders all other points by distance.
+        self.nle = nbr.NeighbourLonLatEuclidean(SAMPLE_LONLAT, 9)
 
     def test_initialization(self):
         assert self.nle.data.shape == (10, 3)
         assert np.array_equal(self.nle.data.columns,
                               np.array(['ID', 'Lon', 'Lat']))
+        # Check that we can convert from indices to IDs and back again.
         assert np.array_equal(
             self.nle.data.index.values,
             self.nle.to_idxs(self.nle.to_ids(self.nle.data.index.values)))
@@ -35,7 +36,7 @@ class TestNeighbourLocalEuclidean:
             [[0., 0.],
              [0., self.nle._r_earth * dtr],
              [-self.nle._r_earth * dtr * np.cos(np.radians(lat0)), 0.]])
-    
+
         assert np.allclose(outs, self.nle.get_xy(lons, lats))
 
     def test_getneighbours(self):
@@ -57,6 +58,7 @@ class TestNeighbourLocalEuclidean:
             assert np.array_equal(
                 self.nle.to_idxs(self.nle.data.at[i, 'Neighbours']),
                 np.argsort(distmtx[i])[1:])
+            assert np.sort(distmtx[i])[0] == 0.
             assert np.allclose(self.nle.data.at[i, 'Distances'],
                                np.sort(distmtx[i])[1:])
 
@@ -75,17 +77,16 @@ class TestNeighbourLocalEuclidean:
                                rtol=1e-3, atol=1e-5)
 
 
-class TestNeighbourLocalManhattan:
+class TestNeighbourLonLatManhattan:
 
     def setup(self):
-        # There are only 10 items, so this is an all-to-all comparison.
-        self.nlm = nbr.NeighbourLocalManhattan(SAMPLE_LONLAT, 9)
+        # There are only 10 items, so this orders all other points by distance.
+        self.nlm = nbr.NeighbourLonLatManhattan(SAMPLE_LONLAT, 9)
 
     def test_getxy(self):
         lons = self.nlm.data['Lon'].values
         lats = self.nlm.data['Lat'].values
-        # Code from
-        # https://scipython.com/book/chapter-6-numpy/examples/creating-a-rotation-matrix-in-numpy/
+        # Create a rotation matrix, and compare against the one from neighbour.
         theta = np.radians(cfg.distances['toronto_street_angle'])
         c, s = np.cos(theta), np.sin(theta)
         R = np.array([[c, -s], [s, c]])
