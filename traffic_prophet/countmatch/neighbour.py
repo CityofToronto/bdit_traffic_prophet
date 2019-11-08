@@ -27,8 +27,8 @@ class NeighbourLocalBase(NeighbourBase):
                                     index=self._id_to_idx.values)
 
     def lonlat_to_xy(self, lon, lat):
-        lat = np.radians(lat)
         lon = np.radians(lon)
+        lat = np.radians(lat)
         lon0, lat0 = np.radians(cfg.distances['centre_of_toronto'])
 
         dlat = lat - lat0
@@ -37,10 +37,10 @@ class NeighbourLocalBase(NeighbourBase):
         # Convert to physical distances and rotate.
         return self._r_earth * np.c_[dlon, dlat]
 
-    def get_xy(self, lat, lon):
+    def get_xy(self, lon, lat):
         """Calculate Manhattan x/y."""
         # Convert latlon to physical distances.
-        return self.lonlat_to_xy(lat, lon)
+        return self.lonlat_to_xy(lon, lat)
 
     def to_ids(self, idxs):
         return self._id_to_idx[idxs].values
@@ -55,8 +55,7 @@ class NeighbourLocalBase(NeighbourBase):
 
     def get_neighbours(self):
         # Transform data to physical grid.
-        xy = self.get_xy(self.data['Lat'].values,
-                         self.data['Lon'].values)
+        xy = self.get_xy(self.data['Lon'].values, self.data['Lat'].values)
         # Query tree.
         dists, idxs = self.query_tree(xy)
 
@@ -77,15 +76,19 @@ class NeighbourLocalManhattan(NeighbourLocalBase):
     _metric = skln.dist_metrics.ManhattanDistance()
 
     def get_rotation_matrix(self):
-        gridangle = np.radians(cfg.distances['toronto_street_angle_degrees'])
-        return np.array(
-            [[np.cos(gridangle), np.sin(gridangle)],
-             [-np.sin(gridangle), np.cos(gridangle)]])
+        """2D rotation matrix.
 
-    def get_xy(self, lat, lon):
+        Uses **counterclockwise** rotation angle from configuration file.
+        """
+        gridangle = np.radians(cfg.distances['toronto_street_angle'])
+        return np.array(
+            [[np.cos(gridangle), -np.sin(gridangle)],
+             [np.sin(gridangle), np.cos(gridangle)]])
+
+    def get_xy(self, lon, lat):
         """Calculate Manhattan x/y."""
         # Convert latlon to physical distances.
-        xy = self.lonlat_to_xy(lat, lon)
+        xy = self.lonlat_to_xy(lon, lat)
         # Rotate and sum to obtain Manhattan distances.  Transpose of the
         # usual rotation matrix, since we reverse the dot product order.
         return xy.dot(self.get_rotation_matrix())
