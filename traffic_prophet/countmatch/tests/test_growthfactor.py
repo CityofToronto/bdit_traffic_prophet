@@ -4,9 +4,11 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 
-from ...data import SAMPLE_ZIP
 from .. import reader
 from .. import growthfactor as gf
+
+from ...data import SAMPLE_ZIP
+
 
 class TestGrowthFactor:
     """Test growth factor calculation."""
