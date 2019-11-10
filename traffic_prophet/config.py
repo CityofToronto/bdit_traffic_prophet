@@ -21,3 +21,11 @@ distances = {
     # (measured from Spadina/Lakeshore to Spadina/Dupont), in degres.
     'toronto_street_angle': 16.485518084102
 }
+
+# DO NOT STORE PERSONAL CREDENTIALS HERE!
+postgres = {
+    # Name of database.
+    'database': 'bigdata',
+    # Name of schema and table.
+    'schema_table': 'prj_volume.uoft_centreline_volumes_output'
+}
