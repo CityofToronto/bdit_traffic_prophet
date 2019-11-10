@@ -76,7 +76,7 @@ class AnnualCount(Count):
         return crd
 
     @staticmethod
-    def process_count_data(crd):
+    def process_zip_count_data(crd):
         """Calculates total daily traffic from raw count data."""
         crdg = crd.groupby('Date')
         daily_counts = pd.DataFrame({
@@ -174,8 +174,8 @@ class AnnualCount(Count):
                 'DoM Factor': dom_factor, 'AADT': aadt}
 
     @classmethod
-    def from_raw_data(cls, rd):
-        """Processes data from a raw data dictionary.
+    def from_raw_zip(cls, rd):
+        """Processes data from raw data from 15-minute bin zip files.
 
         Parameters
         ----------
@@ -188,7 +188,7 @@ class AnnualCount(Count):
         crd = cls.regularize_timeseries(rd)
 
         # Get daily total count values.
-        daily_count = cls.process_count_data(crd)
+        daily_count = cls.process_zip_count_data(crd)
 
         # If count is permanent, also get MADT, AADT, DoMADT and DoM factors.
         if cls.is_permanent_count(rd):
@@ -242,7 +242,7 @@ class Reader:
             if not zipfile.is_zipfile(zf):
                 raise IOError('{0} is not a zip file.'.format(zf))
 
-            current_counts = [AnnualCount.from_raw_data(c)
+            current_counts = [AnnualCount.from_raw_zip(c)
                               for c in self.get_zipreader(zf)]
 
             # Append counts to processed count dicts.
@@ -262,7 +262,6 @@ class Reader:
 
         # Cycle through all files in the zip and append data to a list.
         with zipfile.ZipFile(zipname) as fhz:
-            counts = []
             for fn in fhz.filelist:
                 # Decode centreline ID and direction from first line of file.
                 with fhz.open(fn) as fh:
@@ -277,10 +276,6 @@ class Reader:
                                        usecols=[3, 4], parse_dates=[0, ],
                                        infer_datetime_format=True)
                     data.columns = ['Timestamp', 'Count']
-
-                counts.append(
-                    AnnualCount(centreline_id, direction,
-                                data.at[0, 'Timestamp'].year, data))
 
                 # Check if file has enough data to return.
                 # TO DO: log a warning if file is insufficient?
