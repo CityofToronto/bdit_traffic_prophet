@@ -4,7 +4,6 @@ import pandas as pd
 
 from ...data import SAMPLE_ZIP
 from .. import reader
-from ...connection import Connection
 
 
 class TestAnnualCount:
@@ -22,14 +21,12 @@ class TestAnnualCount:
         ac = reader.AnnualCount(1000, -1, 2010, None)
         crd = ac.regularize_timeseries(self.ptc_data)
         assert (sorted(crd.columns) ==
-                sorted(['Timestamp', 'Date', 'Month', 'Day of Week', 'Count']))
-        assert crd.shape == (self.ptc_data['data'].shape[0], 5)
+                sorted(['Timestamp', 'Date', 'Count']))
+        assert crd.shape == (self.ptc_data['data'].shape[0], 3)
         assert np.array_equal(crd['Timestamp'].dt.minute.unique(),
                               np.array([0, 15, 30, 45]))
         assert np.all(crd['Count'] ==
                       self.ptc_data['data']['Count'].astype(float))
-        assert np.all(crd['Day of Week'] ==
-                      self.ptc_data['data']['Timestamp'].dt.dayofweek)
 
         # Introduce some errors to sttc_data.
         fake_sttc_data = self.sttc_data.copy()
@@ -41,7 +38,7 @@ class TestAnnualCount:
         fake_sttc_data['data'].at[32, 'Timestamp'] = (
             pd.Timestamp('2010-06-09 07:51:12'))
         crd2 = ac.regularize_timeseries(fake_sttc_data)
-        assert crd2.shape == (self.sttc_data['data'].shape[0] - 2, 5)
+        assert crd2.shape == (self.sttc_data['data'].shape[0] - 2, 3)
         assert np.array_equal(crd2['Timestamp'].dt.minute.unique(),
                               np.array([0, 15, 30, 45]))
         assert crd2.at[30, 'Timestamp'] == pd.Timestamp('2010-06-09 07:45:00')
@@ -84,37 +81,43 @@ class TestAnnualCount:
         # do in the case of sparse data.
         temp_data = self.ptc_data.copy()
         temp_data['data'] = self.ptc_data['data'].loc[:24863, :].copy()
-        crd = ac.regularize_timeseries(temp_data)
-        po = ac.process_permanent_count_data(crd)
+        dc = ac.process_15min_count_data(
+            ac.regularize_timeseries(temp_data))
+        po = ac.process_permanent_count_data(dc)
+        # These are only available internally in process_permanent_count_data,
+        # so recalculate here.
+        dc['Month'] = dc['Date'].dt.month
+        dc['Day of Week'] = dc['Date'].dt.dayofweek   
 
         po_m = po['MADT']
         assert ((po_m['MADT'] *
-                 crd.groupby('Month')['Count'].count() / 96.).sum() ==
-                crd['Count'].sum())
+                 dc.groupby('Month')['Daily Count'].count()).sum() ==
+                dc['Daily Count'].sum())
         # 2010 is not a leap year.
         assert po_m['Days in Month'].sum() == 365
 
         # Every month and day of week must be included in domadt.
         assert po['DoMADT'].shape == (12, 7)
-        n_dom = (crd.groupby(['Month', 'Day of Week'])['Count']
-                 .count().unstack() // 96)
-        sum_dom = (crd.groupby(['Month', 'Day of Week'])['Count']
-                   .sum().unstack())
+        dc_domg = dc.groupby(['Month', 'Day of Week'])
+        n_dom = dc_domg['Daily Count'].count().unstack()
+        sum_dom = dc_domg['Daily Count'].sum().unstack()
         assert np.allclose(po['DoMADT'] * n_dom, sum_dom,
                            rtol=1e-10, equal_nan=True)
 
+        # Check that we can recover MADT from DoMADT using DoM Factor.
         assert po['DoM Factor'].shape == (12, 7)
         po_factortimesdom = (po['DoM Factor'] * po['DoMADT']).values
         repeated_madt = np.repeat(po['MADT']['MADT'].values[:, np.newaxis],
                                   7, axis=1)
         assert np.allclose(po_factortimesdom[:11, :],
                            repeated_madt[:11, :], rtol=1e-10)
-        dec1_dow = crd.iat[-1, 0].dayofweek
+        # Only Wednesday, Dec 1 is available in December.
+        dec1_dow = dc.iat[-1, 0].dayofweek
         assert np.isclose(po_factortimesdom[11, dec1_dow],
                           repeated_madt[11, dec1_dow])
 
         # Explicitly check that days with no data are NaN.  First, get all
-        # days of the week other than the one for Dec # 1.
+        # days of the week other than the one for Dec 1.
         weekdays_not_dec1 = list(set(range(7)) - set((dec1_dow, )))
         assert np.all(np.isnan(po['DoMADT'].iloc[-1, weekdays_not_dec1]))
         assert np.all(np.isnan(po['DoM Factor'].iloc[-1, weekdays_not_dec1]))
