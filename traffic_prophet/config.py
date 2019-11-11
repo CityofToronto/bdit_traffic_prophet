@@ -11,7 +11,9 @@ cm = {
                         1147135],
     'exclude_ptc_pos': [446402, 7204532, 1145377, 30029635, 1147358, 106853,
                         1140996, 1797, 14177830, 30073989, 14189397,
-                        440428, 14659261]
+                        440428, 14659261],
+    'min_year': 2006,
+    'max_year': 2018
 }
 
 distances = {
@@ -26,6 +28,4 @@ distances = {
 postgres = {
     # Name of database.
     'database': 'bigdata',
-    # Name of schema and table.
-    'schema_table': 'prj_volume.uoft_centreline_volumes_output'
 }

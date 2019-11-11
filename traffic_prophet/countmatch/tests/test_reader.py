@@ -4,6 +4,7 @@ import pandas as pd
 
 from ...data import SAMPLE_ZIP
 from .. import reader
+from ...connection import Connection
 
 
 class TestAnnualCount:
@@ -46,24 +47,25 @@ class TestAnnualCount:
         assert crd2.at[30, 'Timestamp'] == pd.Timestamp('2010-06-09 07:45:00')
         assert np.isclose(crd2.at[30, 'Count'], 93., rtol=1e-10)
 
-    def test_process_zip_count_data(self):
+    def test_process_15min_count_data(self):
         ac = reader.AnnualCount(1000, -1, 2010, None)
         crd = ac.regularize_timeseries(self.ptc_data)
-        daily_counts = ac.process_zip_count_data(crd)
+        daily_count = ac.process_15min_count_data(crd)
+        ac.reset_daily_count_index(daily_count)
 
         # Ensure every unique date is represented.
-        assert daily_counts.shape == (crd['Date'].unique().shape[0], 2)
-        assert not np.any(daily_counts.index.duplicated())
+        assert daily_count.shape == (crd['Date'].unique().shape[0], 2)
+        assert not np.any(daily_count.index.duplicated())
 
         # Check that index values represent days of year.
-        assert np.array_equal(daily_counts.index.values,
-                              daily_counts['Date'].dt.dayofyear)
+        assert np.array_equal(daily_count.index.values,
+                              daily_count['Date'].dt.dayofyear)
 
         # Fuzz test to see if we've summed the counts up properly.
-        for cidx in np.random.choice(daily_counts.index.values, size=10):
-            cdate = daily_counts.at[cidx, 'Date'].date()
+        for cidx in np.random.choice(daily_count.index.values, size=10):
+            cdate = daily_count.at[cidx, 'Date'].date()
             assert np.isclose(
-                daily_counts.at[cidx, 'Daily Count'],
+                daily_count.at[cidx, 'Daily Count'],
                 crd.loc[crd['Date'] == cdate, 'Count'].sum(),
                 rtol=1e-10)
 
@@ -122,15 +124,15 @@ class TestAnnualCount:
                 po['MADT']['Days in Month'].sum())
         assert np.isclose(po['AADT'], aadt, rtol=1e-10)
 
-    def test_from_raw_zip(self):
-        sttc_ac = reader.AnnualCount.from_raw_zip(self.sttc_data)
+    def test_from_raw_data(self):
+        sttc_ac = reader.AnnualCount.from_raw_data(self.sttc_data)
         assert isinstance(sttc_ac, reader.AnnualCount)
         assert sttc_ac.centreline_id == self.sttc_data['centreline_id']
         assert sttc_ac.direction == self.sttc_data['direction']
         assert sttc_ac.year == self.sttc_data['year']
         assert isinstance(sttc_ac.data, pd.DataFrame)
 
-        ptc_ac = reader.AnnualCount.from_raw_zip(self.ptc_data)
+        ptc_ac = reader.AnnualCount.from_raw_data(self.ptc_data)
         assert isinstance(ptc_ac.data, dict)
         assert (sorted(ptc_ac.data.keys()) ==
                 sorted(['Daily Count', 'MADT', 'DoMADT',
@@ -196,9 +198,9 @@ class TestReader:
 
     def test_append_counts(self):
         rdr = reader.Reader(SAMPLE_ZIP)
-        counts_2010 = [reader.AnnualCount.from_raw_zip(c)
+        counts_2010 = [reader.AnnualCount.from_raw_data(c)
                        for c in rdr.get_zipreader(SAMPLE_ZIP['2010'])]
-        counts_2012 = [reader.AnnualCount.from_raw_zip(c)
+        counts_2012 = [reader.AnnualCount.from_raw_data(c)
                        for c in rdr.get_zipreader(SAMPLE_ZIP['2012'])]
         ptcs = {}
         sttcs = {}
@@ -229,9 +231,9 @@ class TestReader:
 
     def test_unify_counts(self):
         rdr = reader.Reader(SAMPLE_ZIP)
-        counts_2010 = [reader.AnnualCount.from_raw_zip(c)
+        counts_2010 = [reader.AnnualCount.from_raw_data(c)
                        for c in rdr.get_zipreader(SAMPLE_ZIP['2010'])]
-        counts_2012 = [reader.AnnualCount.from_raw_zip(c)
+        counts_2012 = [reader.AnnualCount.from_raw_data(c)
                        for c in rdr.get_zipreader(SAMPLE_ZIP['2012'])]
         ptcs = {}
         sttcs = {}

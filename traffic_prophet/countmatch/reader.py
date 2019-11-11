@@ -29,7 +29,7 @@ class AnnualCount(Count):
                          is_permanent=is_permanent)
 
     @staticmethod
-    def regularize_timeseries(rc):
+    def regularize_timeseries(rd):
         """Regularize count data.
 
         Copy's the object's count data and averages out observations with
@@ -37,12 +37,12 @@ class AnnualCount(Count):
 
         Parameters
         ----------
-        rc : RawCount
+        rd : RawCount
             Raw count data object.
 
         """
 
-        crd = rc['data'].copy()
+        crd = rd['data'].copy()
 
         def round_timestamp(timestamp):
             # timestamp must be pandas.Timestamp.
@@ -76,20 +76,23 @@ class AnnualCount(Count):
         return crd
 
     @staticmethod
-    def process_zip_count_data(crd):
+    def process_15min_count_data(crd):
         """Calculates total daily traffic from raw count data."""
         crdg = crd.groupby('Date')
-        daily_counts = pd.DataFrame({
+        daily_count = pd.DataFrame({
             'Daily Count': 96. * crdg['Count'].sum() / crdg['Count'].count()})
-        daily_counts.reset_index(inplace=True)
-        daily_counts['Date'] = pd.to_datetime(daily_counts['Date'])
-        daily_counts.set_index(
-            pd.Index(daily_counts['Date'].dt.dayofyear, name='Day of Year'),
-            inplace=True)
-        return daily_counts
+        daily_count.reset_index(inplace=True)
+        daily_count['Date'] = pd.to_datetime(daily_count['Date'])
+        return daily_count
 
     @staticmethod
-    def is_permanent_count(rc):
+    def reset_daily_count_index(daily_count):
+        daily_count.set_index(
+            pd.Index(daily_count['Date'].dt.dayofyear, name='Day of Year'),
+            inplace=True)
+
+    @staticmethod
+    def is_permanent_count(rd):
         """Check if a count is permanent.
 
         Checks if count is a permanent traffic count.  Currently permanent
@@ -105,18 +108,18 @@ class AnnualCount(Count):
             is a `pandas.DataFrame` with 'Timestamp' and 'Count' columns.
 
         """
-        n_available_months = rc['data']['Timestamp'].dt.month.unique().shape[0]
+        n_available_months = rd['data']['Timestamp'].dt.month.unique().shape[0]
         if (n_available_months == 12 and
-                (rc['data'].shape[0] >=
+                (rd['data'].shape[0] >=
                  cfg.cm['min_permanent_stn_days'] * 96)):
             excluded_pos_files = (
-                rc['direction'] == 1 and
-                rc['centreline_id'] in cfg.cm['exclude_ptc_pos'])
+                rd['direction'] == 1 and
+                rd['centreline_id'] in cfg.cm['exclude_ptc_pos'])
             excluded_neg_files = (
-                rc['direction'] == -1 and
-                rc['centreline_id'] in cfg.cm['exclude_ptc_neg'])
+                rd['direction'] == -1 and
+                rd['centreline_id'] in cfg.cm['exclude_ptc_neg'])
             if (not excluded_pos_files and not excluded_neg_files and
-                    're' not in rc['filename']):
+                    're' not in rd['filename']):
                 return True
         return False
 
@@ -174,21 +177,32 @@ class AnnualCount(Count):
                 'DoM Factor': dom_factor, 'AADT': aadt}
 
     @classmethod
-    def from_raw_zip(cls, rd):
-        """Processes data from raw data from 15-minute bin zip files.
+    def from_raw_data(cls, rd):
+        """Processes data from 15-minute bin zip files.
 
         Parameters
         ----------
         rd : dict
             Raw data, with entries for 'centreline_id', 'direction',
             'year' and 'data'.  The first three are integers, while 'data'
-            is a `pandas.DataFrame` with 'Timestamp' and 'Count' columns.
+            is a `pandas.DataFrame` with 'Count' column and either 'Timestamp'
+            or 'Date' column.
         """
-        # Copy file and round timestamps to the nearest 15 minutes.
-        crd = cls.regularize_timeseries(rd)
+        # If we're reading from raw zip files.
+        if 'Timestamp' in rd['data'].keys():
+            # Copy file and round timestamps to the nearest 15 minutes.
+            crd = cls.regularize_timeseries(rd)
+            # Get daily total count values.
+            daily_count = cls.process_15min_count_data(crd)
+        # If we're instead reading from Postgres.
+        elif 'Date' in rd.data.keys():
+            daily_count = rd.data.copy()
+        else:
+            raise ValueError("raw input data missing "
+                             "'Timestamp' or 'Date' column.")
 
-        # Get daily total count values.
-        daily_count = cls.process_zip_count_data(crd)
+        # Reset daily_count index, common to both zip files and Postgres.
+        cls.reset_daily_count_index(daily_count)
 
         # If count is permanent, also get MADT, AADT, DoMADT and DoM factors.
         if cls.is_permanent_count(rd):
@@ -205,6 +219,10 @@ class AnnualCount(Count):
 
 class Reader:
 
+    _sql_cmd = ("SELECT centreline_id, direction, count_date, daily_count "
+                "FROM {dbt} WHERE count_year = {year} "
+                "ORDER BY centreline_id, direction, count_date")
+
     def __init__(self, source):
         # Store permanent and temporary stations.
         self.ptcs = None
@@ -214,7 +232,7 @@ class Reader:
         if isinstance(source, conn.Connection):
             # TO DO: figure out psycopg2 connection.
             self.sourcetype = 'SQL'
-            self._reader = None
+            self._reader = self.read_sql
         else:
             self.sourcetype = 'Zip'
             self._reader = self.read_zip
@@ -242,7 +260,7 @@ class Reader:
             if not zipfile.is_zipfile(zf):
                 raise IOError('{0} is not a zip file.'.format(zf))
 
-            current_counts = [AnnualCount.from_raw_zip(c)
+            current_counts = [AnnualCount.from_raw_data(c)
                               for c in self.get_zipreader(zf)]
 
             # Append counts to processed count dicts.
@@ -285,6 +303,46 @@ class Reader:
                            'direction': int(direction),
                            'data': data,
                            'year': data.at[0, 'Timestamp'].year}
+
+    def read_sql(self):
+        """Read PostgreSQL table contents into AnnualCount objects."""
+        # ptcs and sttcs hold arrays of processed counts.
+        ptcs = {}
+        sttcs = {}
+
+        # Cycle through all zip files.
+        for year in range(cfg.cm['min_year'], cfg.cm['max_year'] + 1):
+            current_counts = [AnnualCount.from_raw_data(c)
+                              for c in self.get_sqlreader(year)]
+
+            # Append counts to processed count dicts.
+            self.append_counts(current_counts, ptcs, sttcs)
+
+        # self.check_processed_count_integrity(ptcs, sttcs)
+        # self.unify_counts(ptcs, sttcs)
+        self.ptcs = ptcs
+        self.sttcs = sttcs
+
+    def get_sqlreader(self, year):
+        with self.source.connect() as db_con:
+            all_data = pd.read_sql(
+                self._sql_cmd.format(dbt=self.source.tablename,  year=year),
+                db_con, parse_dates=['count_date', ])
+
+            for key, df in all_data.groupby(['centreline_id', 'direction']):
+                centreline_id = key[0]
+                direction = key[1]
+
+                data = df[['count_date', 'daily_count']].copy()
+                data.columns = ['Date', 'Daily Count']
+
+                # Filename is used to flag for HW401 data in Arman's zip files,
+                # so just pass a dummy value here.
+                yield {'filename': 'frompostgres',
+                       'centreline_id': int(centreline_id),
+                       'direction': int(direction),
+                       'data': data,
+                       'year': year}
 
     @staticmethod
     def has_enough_data(data):
