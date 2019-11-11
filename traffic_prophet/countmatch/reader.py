@@ -68,10 +68,6 @@ class AnnualCount(Count):
 
         # Required for calculating averaged data.
         crd['Date'] = crd['Timestamp'].dt.date
-        # These are only used if the count is from a permanent station, but
-        # leaving here so that `crd` is idempotent within those functions.
-        crd['Month'] = crd['Timestamp'].dt.month
-        crd['Day of Week'] = crd['Timestamp'].dt.dayofweek
 
         return crd
 
@@ -124,56 +120,43 @@ class AnnualCount(Count):
         return False
 
     @staticmethod
-    def process_permanent_count_data(crd):
+    def process_permanent_count_data(dc):
         """Derives AADT, DoMADT and DoM factor values for permanent counts.
 
         Notes
         -----
-        Averaging methods are identical to `STTC_estimate3.m` in the original
-        TEPs-I.  To be entirely self-consistent, time bins with incomplete
-        data (eg. months where only certain days are covered, days where
-        only certain 15-minute segments) should either be partly retained (eg.
-        by simply averaging all time bins of a certain month, or day of week
-        within the month, together), completely dropped or inflated.  These all
-        introduce their own biases, though those may be minor.
+        Averaging methods are more conservative than `STTC_estimate3.m` - only
+        days with complete data are included in the MADT and DoMADT estimates.
 
         Parameters
         ----------
-        crd : pandas.DataFrame
-            Data from a RawCount object processed within `from_rawcount`.
+        dc : pandas.DataFrame
+           DataFrame containing daily counts.
 
         """
+        # Ensure dc remains unchanged by the method.
+        cdc = dc.copy()
+        cdc['Month'] = cdc['Date'].dt.month
+        cdc['Day of Week'] = cdc['Date'].dt.dayofweek
 
         # Calculate MADT.
-        crd_m = crd.groupby('Month')
+        cdc_m = cdc.groupby('Month')
         madt = pd.DataFrame({
-            'MADT': 96. * crd_m['Count'].sum() / crd_m['Count'].count(),
-            'Days in Month': crd_m['Timestamp'].min().dt.days_in_month}
+            'MADT': cdc_m['Daily Count'].sum() / cdc_m['Daily Count'].count(),
+            'Days in Month': cdc_m['Date'].min().dt.days_in_month}
         )
 
         # Calculate day-of-week of month ADT.
-        crd_date = (crd.groupby(['Date', 'Month', 'Day of Week'])['Count']
-                    .agg(['sum', 'count'])
-                    .reset_index(level=(1, 2)))
-        # Drop any days with incomplete data.
-        crd_date = crd_date.loc[crd_date['count'] == 96, :]
-        crd_dom = crd_date.groupby(['Month', 'Day of Week'])
-        domadt = (crd_dom['sum'].sum().unstack() /
-                  crd_dom['sum'].count().unstack())
+        cdc_dom = cdc.groupby(['Month', 'Day of Week'])
+        domadt = (cdc_dom['Daily Count'].sum().unstack() /
+                  cdc_dom['Daily Count'].count().unstack())
         # Determine DoM conversion factor.  (Uses a numpy broadcasting trick.)
         dom_factor = madt['MADT'].values[:, np.newaxis] / domadt
-
-        # TO DO: A much simpler way to calculate domadt, consistent with MADT
-        # above, would be:
-        #     crd_dom = crd.groupby(['Date', 'Month'])
-        #     domadt = (96. * crd_dom['Count'].sum().unstack() /
-        #               crd_dom['Count'].count().unstack())
-        # We should consider using this instead.
 
         # Weighted average for AADT.
         aadt = np.average(madt['MADT'], weights=madt['Days in Month'])
 
-        return {'MADT': madt, 'DoMADT': domadt,
+        return {'Daily Count': dc, 'MADT': madt, 'DoMADT': domadt,
                 'DoM Factor': dom_factor, 'AADT': aadt}
 
     @classmethod
@@ -207,8 +190,7 @@ class AnnualCount(Count):
         # If count is permanent, also get MADT, AADT, DoMADT and DoM factors.
         if cls.is_permanent_count(rd):
             # Save to a new object.
-            ptc_data = cls.process_permanent_count_data(crd)
-            ptc_data['Daily Count'] = daily_count
+            ptc_data = cls.process_permanent_count_data(daily_count)
             return cls(rd['centreline_id'], rd['direction'], rd['year'],
                        ptc_data, is_permanent=True)
 
