@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
 import sklearn.neighbors as skln
+
 from .. import cfg
+from .. import conn
 
 
 class NeighbourBase:
@@ -17,10 +19,17 @@ class NeighbourLonLatBase(NeighbourBase):
     _r_earth = 6.371e3
     _metric = None
 
-    def __init__(self, sourcefile, n_neighbours):
+    def __init__(self, source, n_neighbours):
         super().__init__(n_neighbours)
 
-        self.data = pd.read_csv(sourcefile)
+        if isinstance(source, conn.Connection):
+            with source.connect() as db_con:
+                self.data = pd.read_sql(
+                    ("SELECT centreline_id, lon, lat FROM {dbt}"
+                     .format(dbt=source.tablename)),
+                    db_con)
+        else:
+            self.data = pd.read_csv(source)
         self.data.columns = ['ID', 'Lon', 'Lat']
         self._id_to_idx = self.data['ID'].copy()
         # Technically pd.Series doesn't copy its initializing data, but
