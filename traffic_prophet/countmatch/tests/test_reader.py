@@ -87,7 +87,7 @@ class TestAnnualCount:
         # These are only available internally in process_permanent_count_data,
         # so recalculate here.
         dc['Month'] = dc['Date'].dt.month
-        dc['Day of Week'] = dc['Date'].dt.dayofweek   
+        dc['Day of Week'] = dc['Date'].dt.dayofweek
 
         po_m = po['MADT']
         assert ((po_m['MADT'] *

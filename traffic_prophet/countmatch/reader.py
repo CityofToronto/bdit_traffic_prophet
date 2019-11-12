@@ -110,16 +110,17 @@ class AnnualCount(Count):
         if 'Timestamp' in rd['data'].columns:
             n_available_months = (rd['data']['Timestamp']
                                   .dt.month.unique().shape[0])
+            permanent_stn_days = rd['data'].shape[0] // 96
         elif 'Date' in rd['data'].columns:
             n_available_months = (rd['data']['Date']
                                   .dt.month.unique().shape[0])
+            permanent_stn_days = rd['data'].shape[0]
         else:
             raise ValueError("raw input data missing "
                              "'Timestamp' or 'Date' column.")
 
         if (n_available_months == 12 and
-                (rd['data'].shape[0] >=
-                 cfg.cm['min_permanent_stn_days'] * 96)):
+                (permanent_stn_days >= cfg.cm['min_permanent_stn_days'])):
             excluded_pos_files = (
                 rd['direction'] == 1 and
                 rd['centreline_id'] in cfg.cm['exclude_ptc_pos'])
@@ -313,8 +314,8 @@ class Reader:
             # Append counts to processed count dicts.
             self.append_counts(current_counts, ptcs, sttcs)
 
-        # self.check_processed_count_integrity(ptcs, sttcs)
-        # self.unify_counts(ptcs, sttcs)
+        self.check_processed_count_integrity(ptcs, sttcs)
+        self.unify_counts(ptcs, sttcs)
         self.ptcs = ptcs
         self.sttcs = sttcs
 
@@ -332,8 +333,9 @@ class Reader:
                 data.columns = ['Date', 'Daily Count']
 
                 # Filename is used to flag for HW401 data in Arman's zip files,
-                # so just pass a dummy value here.
-                yield {'filename': 'frompostgres',
+                # so just pass a dummy value here.  Note that we can't use
+                # 'postgres' here since it contains 're'!
+                yield {'filename': 'fromPG',
                        'centreline_id': int(centreline_id),
                        'direction': int(direction),
                        'data': data,
