@@ -28,10 +28,12 @@ class NeighbourLonLatBase(NeighbourBase):
                     ("SELECT centreline_id, lon, lat FROM {dbt}"
                      .format(dbt=source.tablename)),
                     db_con)
+                self.data['centreline_id'] = (self.data['centreline_id']
+                                              .astype(int))
         else:
             self.data = pd.read_csv(source)
-        self.data.columns = ['ID', 'Lon', 'Lat']
-        self._id_to_idx = self.data['ID'].copy()
+        self.data.columns = ['Centreline ID', 'Lon', 'Lat']
+        self._id_to_idx = self.data['Centreline ID'].copy()
         # Technically pd.Series doesn't copy its initializing data, but
         # this isn't publicly accessible.
         self._idx_to_id = pd.Series(self._id_to_idx.keys().values,
