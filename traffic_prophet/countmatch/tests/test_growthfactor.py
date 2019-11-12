@@ -1,4 +1,3 @@
-import pytest
 import hypothesis as hyp
 import numpy as np
 import pandas as pd

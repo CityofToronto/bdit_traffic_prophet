@@ -18,7 +18,7 @@ class TestNeighbourLonLatEuclidean:
     def test_initialization(self):
         assert self.nle.data.shape == (10, 3)
         assert np.array_equal(self.nle.data.columns,
-                              np.array(['ID', 'Lon', 'Lat']))
+                              np.array(['Centreline ID', 'Lon', 'Lat']))
         # Check that we can convert from indices to IDs and back again.
         assert np.array_equal(
             self.nle.data.index.values,
