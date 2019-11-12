@@ -40,8 +40,8 @@ class TestGrowthFactor:
         rdr = reader.Reader(SAMPLE_ZIP)
         rdr.read()
 
-        # PTC 104870/-1 has multiple years of data.
-        ptc_raw = rdr.ptcs[104870]
+        # PTC -104870 has multiple years of data.
+        ptc_raw = rdr.ptcs[-104870]
         ptc_perm = gf.PermCount.from_ptc_count_object(ptc_raw)
         assert ptc_perm.centreline_id == ptc_raw.centreline_id
         assert ptc_perm.direction == ptc_raw.direction
@@ -63,8 +63,8 @@ class TestGrowthFactor:
         assert ptc_perm._fit_type == 'Exponential'
         assert np.isclose(ptc_perm.growth_factor, fit.params[0])
 
-        # PTC 890/-1 only has one year.
-        ptc_raw = rdr.ptcs[890]
+        # PTC -890 only has one year.
+        ptc_raw = rdr.ptcs[-890]
         ptc_perm = gf.PermCount.from_ptc_count_object(ptc_raw)
 
         # Check WADT retrieval.

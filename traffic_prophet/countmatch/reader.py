@@ -12,7 +12,9 @@ from .. import conn
 
 class Count:
 
-    def __init__(self, centreline_id, direction, data, is_permanent=False):
+    def __init__(self, count_id, centreline_id, direction,
+                 data, is_permanent=False):
+        self.count_id = count_id
         self.centreline_id = int(centreline_id)
         self.direction = int(direction)
         self.is_permanent = bool(is_permanent)
@@ -25,7 +27,8 @@ class AnnualCount(Count):
     def __init__(self, centreline_id, direction, year,
                  data, is_permanent=False):
         self.year = int(year)
-        super().__init__(centreline_id, direction, data,
+        count_id = direction * centreline_id
+        super().__init__(count_id, centreline_id, direction, data,
                          is_permanent=is_permanent)
 
     @staticmethod
@@ -104,7 +107,16 @@ class AnnualCount(Count):
             is a `pandas.DataFrame` with 'Timestamp' and 'Count' columns.
 
         """
-        n_available_months = rd['data']['Timestamp'].dt.month.unique().shape[0]
+        if 'Timestamp' in rd['data'].columns:
+            n_available_months = (rd['data']['Timestamp']
+                                  .dt.month.unique().shape[0])
+        elif 'Date' in rd['data'].columns:
+            n_available_months = (rd['data']['Date']
+                                  .dt.month.unique().shape[0])
+        else:
+            raise ValueError("raw input data missing "
+                             "'Timestamp' or 'Date' column.")
+
         if (n_available_months == 12 and
                 (rd['data'].shape[0] >=
                  cfg.cm['min_permanent_stn_days'] * 96)):
@@ -117,6 +129,7 @@ class AnnualCount(Count):
             if (not excluded_pos_files and not excluded_neg_files and
                     're' not in rd['filename']):
                 return True
+
         return False
 
     @staticmethod
@@ -172,14 +185,14 @@ class AnnualCount(Count):
             or 'Date' column.
         """
         # If we're reading from raw zip files.
-        if 'Timestamp' in rd['data'].keys():
+        if 'Timestamp' in rd['data'].columns:
             # Copy file and round timestamps to the nearest 15 minutes.
             crd = cls.regularize_timeseries(rd)
             # Get daily total count values.
             daily_count = cls.process_15min_count_data(crd)
         # If we're instead reading from Postgres.
-        elif 'Date' in rd.data.keys():
-            daily_count = rd.data.copy()
+        elif 'Date' in rd['data'].columns:
+            daily_count = rd['data'].copy()
         else:
             raise ValueError("raw input data missing "
                              "'Timestamp' or 'Date' column.")
@@ -335,10 +348,10 @@ class Reader:
     def append_counts(current_counts, ptcs, sttcs):
         for c in current_counts:
             _appendto = ptcs if c.is_permanent else sttcs
-            if c.centreline_id in _appendto.keys():
-                _appendto[c.centreline_id].append(c)
+            if c.count_id in _appendto.keys():
+                _appendto[c.count_id].append(c)
             else:
-                _appendto[c.centreline_id] = [c, ]
+                _appendto[c.count_id] = [c, ]
 
     @staticmethod
     def check_processed_count_integrity(ptcs, sttcs):
@@ -385,7 +398,8 @@ class Reader:
                     {'AADT': [c.data['AADT'] for c in ptcs[cid]]},
                     index=pd.Index([c.year for c in ptcs[cid]], name='Year'))}
             # Replace list of multipe counts with a single Count object.
-            ptcs[cid] = Count(ptcs[cid][0].centreline_id,
+            ptcs[cid] = Count(ptcs[cid][0].count_id,
+                              ptcs[cid][0].centreline_id,
                               ptcs[cid][0].direction,
                               unified_data, is_permanent=True)
         for cid in sttcs.keys():
@@ -395,6 +409,7 @@ class Reader:
                     [[item.year, ], _ctable.index],
                     names=['Year', _ctable.index.name])
             unified_data = pd.concat([c.data for c in sttcs[cid]])
-            sttcs[cid] = Count(sttcs[cid][0].centreline_id,
+            sttcs[cid] = Count(sttcs[cid][0].count_id,
+                               sttcs[cid][0].centreline_id,
                                sttcs[cid][0].direction,
                                unified_data, is_permanent=False)

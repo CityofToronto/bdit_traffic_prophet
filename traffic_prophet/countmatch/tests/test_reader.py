@@ -212,19 +212,19 @@ class TestReader:
 
         # Annoyingly, there is no overlap in PTC locations between 2010
         # and 2011.
-        assert sorted(ptcs.keys()) == [890, 104870]
+        assert sorted(ptcs.keys()) == [-104870, -890]
         assert (sorted(sttcs.keys()) ==
-                [241, 252, 410, 427, 487, 890, 1978, 446378])
+                [-446378, -1978, -890, -487, -427, -410, -252, -241])
 
         # Check that counts from multiple years are stored under the same key.
-        assert len(ptcs[104870]) == 2
-        assert len(sttcs[241]) == 2
+        assert len(ptcs[-104870]) == 2
+        assert len(sttcs[-241]) == 2
 
         # Check table integrity.
         assert (counts_2010[0].data['DoMADT']
-                .equals(ptcs[104870][0].data['DoMADT']))
+                .equals(ptcs[-104870][0].data['DoMADT']))
         assert (counts_2012[4].data['Daily Count']
-                .equals(sttcs[890][0].data['Daily Count']))
+                .equals(sttcs[-890][0].data['Daily Count']))
 
     def test_check_processed_count_integrity(self):
         rdr = reader.Reader(SAMPLE_ZIP)
@@ -245,36 +245,38 @@ class TestReader:
 
         rdr.unify_counts(ptcs, sttcs)
 
-        assert sorted(ptcs.keys()) == [890, 104870]
+        assert sorted(ptcs.keys()) == [-104870, -890]
         assert (sorted(sttcs.keys()) ==
-                [241, 252, 410, 427, 487, 890, 1978, 446378])
+                [-446378, -1978, -890, -487, -427, -410, -252, -241])
         # Check that we've concatenated two years' data together.
         # `unify_counts` is not idempotent and alters `ptcs` and `sttcs`.
         # Since those do not make copies of data from `counts_2010` and
         # `counts_2012`, those are altered as well.  This only matters for
         # testing, however.
-        assert ptcs[104870].centreline_id == 104870
-        assert ptcs[104870].direction == -1
-        assert ptcs[104870].is_permanent
-        assert ptcs[104870].data['DoM Factor'].equals(
+        assert ptcs[-104870].count_id == -104870
+        assert ptcs[-104870].centreline_id == 104870
+        assert ptcs[-104870].direction == -1
+        assert ptcs[-104870].is_permanent
+        assert ptcs[-104870].data['DoM Factor'].equals(
             pd.concat([counts_2010[0].data['DoM Factor'],
                        counts_2012[0].data['DoM Factor']]))
-        assert sttcs[241].centreline_id == 241
-        assert sttcs[241].direction == -1
-        assert not sttcs[241].is_permanent
-        assert sttcs[241].data.equals(
+        assert sttcs[-241].count_id == -241
+        assert sttcs[-241].centreline_id == 241
+        assert sttcs[-241].direction == -1
+        assert not sttcs[-241].is_permanent
+        assert sttcs[-241].data.equals(
             pd.concat([counts_2010[1].data, counts_2012[2].data]))
 
     def test_read_zip(self):
         rdr = reader.Reader(SAMPLE_ZIP)
         rdr.read()
 
-        assert sorted(rdr.ptcs.keys()) == [890, 104870]
+        assert sorted(rdr.ptcs.keys()) == [-104870, -890]
         assert (sorted(rdr.sttcs.keys()) ==
-                [170, 241, 252, 410, 427, 487, 680, 890, 1978,
-                 104870, 446378])
-        assert isinstance(rdr.ptcs[104870], reader.Count)
-        assert isinstance(rdr.sttcs[241], reader.Count)
+                [-446378, -104870, -1978, -890, -680, -487, -427, -410,
+                 -252, -241, -170])
+        assert isinstance(rdr.ptcs[-104870], reader.Count)
+        assert isinstance(rdr.sttcs[-241], reader.Count)
 
         # Check that all available years have been read in.
         included_years = []

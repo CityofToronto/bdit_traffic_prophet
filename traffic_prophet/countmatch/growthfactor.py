@@ -80,8 +80,8 @@ def linear_factor_fit(week, wadt):
 class PermCount(reader.Count):
     """Class to hold permanent count data and calculate growth factors."""
 
-    def __init__(self, centreline_id, direction, data):
-        super().__init__(centreline_id, direction, data,
+    def __init__(self, count_id, centreline_id, direction, data):
+        super().__init__(count_id, centreline_id, direction, data,
                          is_permanent=True)
         self.growth_factor = None
         self.base_year = None
@@ -91,7 +91,7 @@ class PermCount(reader.Count):
     @classmethod
     def from_ptc_count_object(cls, ptc):
         # Data will be passed by reference.
-        return cls(ptc.centreline_id, ptc.direction, ptc.data)
+        return cls(ptc.count_id, ptc.centreline_id, ptc.direction, ptc.data)
 
     def get_aadt(self):
         aadt = self.data['AADT'].reset_index()
