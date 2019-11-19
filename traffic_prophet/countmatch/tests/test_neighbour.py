@@ -12,11 +12,11 @@ class TestNeighbourLonLatEuclidean:
     """Tests Euclidean file-based neighbour finder.  Also tests base class."""
 
     def setup(self):
-        # There are only 10 items, so this orders all other points by distance.
-        self.nle = nbr.NeighbourLonLatEuclidean(SAMPLE_LONLAT, 9)
+        # There are only 11 items, so this orders all other points by distance.
+        self.nle = nbr.NeighbourLonLatEuclidean(SAMPLE_LONLAT, 10)
 
     def test_initialization(self):
-        assert self.nle.data.shape == (10, 3)
+        assert self.nle.data.shape == (11, 3)
         assert np.array_equal(self.nle.data.columns,
                               np.array(['Centreline ID', 'Lon', 'Lat']))
         # Check that we can convert from indices to IDs and back again.
@@ -53,7 +53,7 @@ class TestNeighbourLonLatEuclidean:
         self.nle.get_neighbours()
 
         # Check that the results are identical (take advantage of the fact that
-        # index is just range(10)).
+        # index is just range(11)).
         for i in range(distmtx.shape[0]):
             assert np.array_equal(
                 self.nle.to_idxs(self.nle.data.at[i, 'Neighbours']),
@@ -80,8 +80,8 @@ class TestNeighbourLonLatEuclidean:
 class TestNeighbourLonLatManhattan:
 
     def setup(self):
-        # There are only 10 items, so this orders all other points by distance.
-        self.nlm = nbr.NeighbourLonLatManhattan(SAMPLE_LONLAT, 9)
+        # There are only 11 items, so this orders all other points by distance.
+        self.nlm = nbr.NeighbourLonLatManhattan(SAMPLE_LONLAT, 10)
 
     def test_getxy(self):
         lons = self.nlm.data['Lon'].values
@@ -107,7 +107,7 @@ class TestNeighbourLonLatManhattan:
         self.nlm.get_neighbours()
 
         # Check that the results are identical (take advantage of the fact that
-        # index is just range(10)).
+        # index is just range(11)).
         for i in range(distmtx.shape[0]):
             assert np.array_equal(
                 self.nlm.to_idxs(self.nlm.data.at[i, 'Neighbours']),

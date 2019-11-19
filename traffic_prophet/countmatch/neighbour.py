@@ -25,8 +25,8 @@ class NeighbourLonLatBase(NeighbourBase):
         if isinstance(source, conn.Connection):
             with source.connect() as db_con:
                 self.data = pd.read_sql(
-                    ("SELECT centreline_id, lon, lat FROM {dbt}"
-                     .format(dbt=source.tablename)),
+                    ("SELECT centreline_id, lon, lat FROM {dbt} "
+                     "ORDER BY centreline_id".format(dbt=source.tablename)),
                     db_con)
                 self.data['centreline_id'] = (self.data['centreline_id']
                                               .astype(int))
