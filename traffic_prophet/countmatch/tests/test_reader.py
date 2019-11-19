@@ -161,6 +161,7 @@ class TestReader:
 
         # Try again but with a list.
         sample = [path + "15_min_counts_2011_neg_sample.zip",
+                  path + "15_min_counts_2011_pos_sample.zip",
                   path + "15_min_counts_2012_neg_sample.zip",
                   path + "15_min_counts_2010_neg_sample.zip"]
         rdr = reader.Reader(sample)
@@ -236,19 +237,23 @@ class TestReader:
         rdr = reader.Reader(SAMPLE_ZIP)
         counts_2010 = [reader.AnnualCount.from_raw_data(c)
                        for c in rdr.get_zipreader(SAMPLE_ZIP['2010'])]
+        counts_2011p = [reader.AnnualCount.from_raw_data(c)
+                        for c in rdr.get_zipreader(SAMPLE_ZIP['2011p'])]
         counts_2012 = [reader.AnnualCount.from_raw_data(c)
                        for c in rdr.get_zipreader(SAMPLE_ZIP['2012'])]
         ptcs = {}
         sttcs = {}
         rdr.append_counts(counts_2010, ptcs, sttcs)
+        rdr.append_counts(counts_2011p, ptcs, sttcs)
         rdr.append_counts(counts_2012, ptcs, sttcs)
 
         rdr.unify_counts(ptcs, sttcs)
 
         assert sorted(ptcs.keys()) == [-104870, -890]
         assert (sorted(sttcs.keys()) ==
-                [-446378, -1978, -890, -487, -427, -410, -252, -241])
-        # Check that we've concatenated two years' data together.
+                [-446378, -1978, -890, -487, -427, -410, -252, -241,
+                 170, 104870])
+        # Check that we've concatenated three years' data together.
         # `unify_counts` is not idempotent and alters `ptcs` and `sttcs`.
         # Since those do not make copies of data from `counts_2010` and
         # `counts_2012`, those are altered as well.  This only matters for
@@ -260,12 +265,19 @@ class TestReader:
         assert ptcs[-104870].data['DoM Factor'].equals(
             pd.concat([counts_2010[0].data['DoM Factor'],
                        counts_2012[0].data['DoM Factor']]))
+
         assert sttcs[-241].count_id == -241
         assert sttcs[-241].centreline_id == 241
         assert sttcs[-241].direction == -1
         assert not sttcs[-241].is_permanent
         assert sttcs[-241].data.equals(
             pd.concat([counts_2010[1].data, counts_2012[2].data]))
+
+        assert sttcs[170].count_id == 170
+        assert sttcs[170].centreline_id == 170
+        assert sttcs[170].direction == 1
+        assert not sttcs[170].is_permanent
+        assert sttcs[170].data.equals(counts_2011p[0].data)
 
     def test_read_zip(self):
         rdr = reader.Reader(SAMPLE_ZIP)
@@ -274,7 +286,7 @@ class TestReader:
         assert sorted(rdr.ptcs.keys()) == [-104870, -890]
         assert (sorted(rdr.sttcs.keys()) ==
                 [-446378, -104870, -1978, -890, -680, -487, -427, -410,
-                 -252, -241, -170])
+                 -252, -241, -170, 170, 104870])
         assert isinstance(rdr.ptcs[-104870], reader.Count)
         assert isinstance(rdr.sttcs[-241], reader.Count)
 
