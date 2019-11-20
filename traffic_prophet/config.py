@@ -5,6 +5,7 @@
 # For countmatch
 cm = {
     'min_stn_count': 96,
+    'min_counts_in_day': 24,
     'min_permanent_stn_days': 274,
     'exclude_ptc_neg': [8540609, 446378, 12336151, 5439677, 1145406, 30019302,
                         7094867, 9722624, 439225, 1146926, 1141002, 440202,

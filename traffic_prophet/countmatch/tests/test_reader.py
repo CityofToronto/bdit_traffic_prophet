@@ -4,6 +4,7 @@ import pandas as pd
 
 from ...data import SAMPLE_ZIP
 from .. import reader
+from ... import cfg
 
 
 class TestAnnualCount:
@@ -65,6 +66,16 @@ class TestAnnualCount:
                 daily_count.at[cidx, 'Daily Count'],
                 crd.loc[crd['Date'] == cdate, 'Count'].sum(),
                 rtol=1e-10)
+        
+        # Check that days with too few counts don't end up in daily counts.
+        # crd_partial has the first three full days of the year, with 73 counts
+        # on the second day removed.
+        crd_partial = (crd.iloc[:288, :]
+                       .drop(index=range(108, 181))
+                       .reset_index(drop=True))
+        daily_count_partial = ac.process_15min_count_data(crd_partial)
+        assert np.array_equal(daily_count_partial['Date'].dt.dayofyear,
+                              np.array([1, 3]))
 
     def test_is_permanent(self):
         known_ptc_ids = [890, 104870]

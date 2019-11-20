@@ -78,8 +78,13 @@ class AnnualCount(Count):
     def process_15min_count_data(crd):
         """Calculates total daily traffic from raw count data."""
         crdg = crd.groupby('Date')
+        # Get the number of bins per day and drop days with fewer than the
+        # minimum allowed number of counts.
+        n_bins = crdg['Count'].count()
+        valids = n_bins >= cfg.cm['min_counts_in_day']
+        # Calculate daily counts.
         daily_count = pd.DataFrame({
-            'Daily Count': 96. * crdg['Count'].sum() / crdg['Count'].count()})
+            'Daily Count': 96. * crdg['Count'].sum()[valids] / n_bins[valids]})
         daily_count.reset_index(inplace=True)
         daily_count['Date'] = pd.to_datetime(daily_count['Date'])
         return daily_count
