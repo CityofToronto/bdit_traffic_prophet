@@ -4,7 +4,6 @@ import pandas as pd
 
 from ...data import SAMPLE_ZIP
 from .. import reader
-from ... import cfg
 
 
 class TestAnnualCount:
@@ -19,7 +18,7 @@ class TestAnnualCount:
 
     def test_regularize_timeseries(self):
         # Test processing a file that has no rounding issues.
-        ac = reader.AnnualCount(1000, -1, 2010, None)
+        ac = reader.AnnualCount(999, 1000, -1, 2010, None)
         crd = ac.regularize_timeseries(self.ptc_data)
         assert (sorted(crd.columns) ==
                 sorted(['Timestamp', 'Date', 'Count']))
@@ -46,7 +45,7 @@ class TestAnnualCount:
         assert np.isclose(crd2.at[30, 'Count'], 93., rtol=1e-10)
 
     def test_process_15min_count_data(self):
-        ac = reader.AnnualCount(1000, -1, 2010, None)
+        ac = reader.AnnualCount(999, 1000, -1, 2010, None)
         crd = ac.regularize_timeseries(self.ptc_data)
         daily_count = ac.process_15min_count_data(crd)
         ac.reset_daily_count_index(daily_count)
@@ -66,20 +65,23 @@ class TestAnnualCount:
                 daily_count.at[cidx, 'Daily Count'],
                 crd.loc[crd['Date'] == cdate, 'Count'].sum(),
                 rtol=1e-10)
-        
+
         # Check that days with too few counts don't end up in daily counts.
         # crd_partial has the first three full days of the year, with 73 counts
         # on the second day removed.
         crd_partial = (crd.iloc[:288, :]
                        .drop(index=range(108, 181))
                        .reset_index(drop=True))
+        assert np.array_equal(
+            crd_partial['Timestamp'].dt.dayofyear.unique(),
+            np.array([1, 2, 3]))
         daily_count_partial = ac.process_15min_count_data(crd_partial)
         assert np.array_equal(daily_count_partial['Date'].dt.dayofyear,
                               np.array([1, 3]))
 
     def test_is_permanent(self):
         known_ptc_ids = [890, 104870]
-        ac = reader.AnnualCount(1000, -1, 2010, None)
+        ac = reader.AnnualCount(999, 1000, -1, 2010, None)
         for c in self.counts:
             if c['centreline_id'] in known_ptc_ids:
                 assert ac.is_permanent_count(self.ptc_data)
@@ -87,7 +89,7 @@ class TestAnnualCount:
                 assert not ac.is_permanent_count(self.sttc_data)
 
     def test_process_permanent_count_data(self):
-        ac = reader.AnnualCount(1000, -1, 2010, None)
+        ac = reader.AnnualCount(999, 1000, -1, 2010, None)
         # We'll use only one day from December to check what the algorithm will
         # do in the case of sparse data.
         temp_data = self.ptc_data.copy()

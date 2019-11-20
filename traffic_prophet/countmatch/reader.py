@@ -24,10 +24,9 @@ class Count:
 class AnnualCount(Count):
     """Storage for total and average daily traffic."""
 
-    def __init__(self, centreline_id, direction, year,
+    def __init__(self, count_id, centreline_id, direction, year,
                  data, is_permanent=False):
         self.year = int(year)
-        count_id = direction * centreline_id
         super().__init__(count_id, centreline_id, direction, data,
                          is_permanent=is_permanent)
 
@@ -80,17 +79,17 @@ class AnnualCount(Count):
         crdg = crd.groupby('Date')
         # Get the number of bins per day and drop days with fewer than the
         # minimum allowed number of counts.
-        n_bins = crdg['Count'].count()
-        valids = n_bins >= cfg.cm['min_counts_in_day']
+        valids = crdg['Count'].count() >= cfg.cm['min_counts_in_day']
         # Calculate daily counts.
         daily_count = pd.DataFrame({
-            'Daily Count': 96. * crdg['Count'].sum()[valids] / n_bins[valids]})
+            'Daily Count': 96. * crdg['Count'].mean()[valids]})
         daily_count.reset_index(inplace=True)
         daily_count['Date'] = pd.to_datetime(daily_count['Date'])
         return daily_count
 
     @staticmethod
     def reset_daily_count_index(daily_count):
+        """In-place reset of `daily_count` index to be the day of year."""
         daily_count.set_index(
             pd.Index(daily_count['Date'].dt.dayofyear, name='Day of Year'),
             inplace=True)
@@ -161,14 +160,13 @@ class AnnualCount(Count):
         # Calculate MADT.
         cdc_m = cdc.groupby('Month')
         madt = pd.DataFrame({
-            'MADT': cdc_m['Daily Count'].sum() / cdc_m['Daily Count'].count(),
+            'MADT': cdc_m['Daily Count'].mean(),
             'Days in Month': cdc_m['Date'].min().dt.days_in_month}
         )
 
         # Calculate day-of-week of month ADT.
         cdc_dom = cdc.groupby(['Month', 'Day of Week'])
-        domadt = (cdc_dom['Daily Count'].sum().unstack() /
-                  cdc_dom['Daily Count'].count().unstack())
+        domadt = cdc_dom['Daily Count'].mean().unstack()
         # Determine DoM conversion factor.  (Uses a numpy broadcasting trick.)
         dom_factor = madt['MADT'].values[:, np.newaxis] / domadt
 
@@ -180,7 +178,7 @@ class AnnualCount(Count):
 
     @classmethod
     def from_raw_data(cls, rd):
-        """Processes data from 15-minute bin zip files.
+        """Processes input data.
 
         Parameters
         ----------
@@ -210,19 +208,16 @@ class AnnualCount(Count):
         if cls.is_permanent_count(rd):
             # Save to a new object.
             ptc_data = cls.process_permanent_count_data(daily_count)
-            return cls(rd['centreline_id'], rd['direction'], rd['year'],
+            return cls(rd['centreline_id'] * rd['direction'],
+                       rd['centreline_id'], rd['direction'], rd['year'],
                        ptc_data, is_permanent=True)
 
         # Save to a new object.
-        return cls(rd['centreline_id'], rd['direction'], rd['year'],
-                   daily_count)
+        return cls(rd['centreline_id'] * rd['direction'], rd['centreline_id'],
+                   rd['direction'], rd['year'], daily_count)
 
 
 class Reader:
-
-    _sql_cmd = ("SELECT centreline_id, direction, count_date, daily_count "
-                "FROM {dbt} WHERE count_year = {year} "
-                "ORDER BY centreline_id, direction, count_date")
 
     def __init__(self, source):
         # Store permanent and temporary stations.
@@ -311,7 +306,7 @@ class Reader:
         ptcs = {}
         sttcs = {}
 
-        # Cycle through all zip files.
+        # Cycle through all relevant years.
         for year in range(cfg.cm['min_year'], cfg.cm['max_year'] + 1):
             current_counts = [AnnualCount.from_raw_data(c)
                               for c in self.get_sqlreader(year)]
@@ -326,9 +321,14 @@ class Reader:
 
     def get_sqlreader(self, year):
         with self.source.connect() as db_con:
-            all_data = pd.read_sql(
-                self._sql_cmd.format(dbt=self.source.tablename,  year=year),
-                db_con, parse_dates=['count_date', ])
+            sql_cmd = (
+                ("SELECT centreline_id, direction, count_date, daily_count "
+                 "FROM {dbt} WHERE count_year = {year} "
+                 "ORDER BY centreline_id, direction, count_date")
+                .format(dbt=self.source.tablename,  year=year))
+
+            all_data = pd.read_sql(sql_cmd, db_con,
+                                   parse_dates=['count_date', ])
 
             for key, df in all_data.groupby(['centreline_id', 'direction']):
                 centreline_id = key[0]
