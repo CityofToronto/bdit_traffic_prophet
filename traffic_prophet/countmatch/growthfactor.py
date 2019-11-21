@@ -1,7 +1,6 @@
 """Determine permanent count year-on-year growth factors."""
 
 import numpy as np
-import pandas as pd
 import statsmodels.api as sm
 
 from . import reader
