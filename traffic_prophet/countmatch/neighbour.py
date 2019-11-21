@@ -8,19 +8,22 @@ from .. import conn
 
 class NeighbourBase:
 
-    def __init__(self, n_neighbours):
+    def __init__(self, n_neighbours, ptc_ids):
         self._n_neighbours = n_neighbours
+        self._ptc_ids = ptc_ids
 
 
 class NeighbourLonLatBase(NeighbourBase):
     # TO DO: class methods need to be made robust against data with repeated
     # IDs or lat-lons, or NaNs.
 
+    # TO DO: should we just calculate neighbours by default?
+
     _r_earth = 6.371e3
     _metric = None
 
-    def __init__(self, source, n_neighbours):
-        super().__init__(n_neighbours)
+    def __init__(self, source, n_neighbours, ptc_ids):
+        super().__init__(n_neighbours, ptc_ids)
 
         if isinstance(source, conn.Connection):
             with source.connect() as db_con:
@@ -33,12 +36,15 @@ class NeighbourLonLatBase(NeighbourBase):
         else:
             self.data = pd.read_csv(source)
         self.data.columns = ['Centreline ID', 'Lon', 'Lat']
-        self._id_to_idx = self.data['Centreline ID'].copy()
-        # Technically pd.Series doesn't copy its initializing data, but
-        # this isn't publicly accessible.
-        self._idx_to_id = pd.Series(self._id_to_idx.keys().values,
-                                    index=self._id_to_idx.values)
-        # TO DO: should we just calculate neighbours by default?
+
+        # Handle index to centreline_id conversions.
+        _idx_to_id = self.data['Centreline ID'].copy()
+        self._id_to_idx = pd.Series(_idx_to_id.keys().values,
+                                    index=_idx_to_id.values)
+
+        # Create a permanent count-only frame
+        self.df_ptc = self.data.loc[self.to_idxs(ptc_ids), :].copy()
+        self.df_ptc.reset_index(drop=True, inplace=True)
 
     def lonlat_to_xy(self, lon, lat):
         """Converts long-lat coordinates to a physical coordinate system.
@@ -61,28 +67,44 @@ class NeighbourLonLatBase(NeighbourBase):
         # Convert latlon to physical distances.
         return self.lonlat_to_xy(lon, lat)
 
-    def to_ids(self, idxs):
-        return self._id_to_idx[idxs].values
-
     def to_idxs(self, ids):
-        return self._idx_to_id[ids].values
+        return self._id_to_idx[ids].values
 
-    def query_tree(self, xy):
-        btree = skln.BallTree(xy, metric=self._metric)
+    def query_tree(self, X, y):
+        """Build a tree to determine nearest points in y from points in X.
+
+        Parameters
+        ----------
+        X : numpy.ndarray
+            Array of points to query neighbours.  First column is longitude,
+            second latitude.
+        y : numpy.ndarray
+            Array of neighbour points, with the same format as X.
+
+        """
+        btree = skln.BallTree(y, metric=self._metric)
         # This will retrieve itself, so ask for N_neighbours + 1.
-        return btree.query(xy, k=(self._n_neighbours + 1))
+        return btree.query(X, k=min(self._n_neighbours + 1, y.shape[0]))
 
     def get_neighbours(self):
         # Transform data to physical grid.
-        xy = self.get_xy(self.data['Lon'].values, self.data['Lat'].values)
+        X = self.get_xy(self.data['Lon'].values, self.data['Lat'].values)
+        y = self.get_xy(self.df_ptc['Lon'].values, self.df_ptc['Lat'].values)
         # Query tree.
-        dists, idxs = self.query_tree(xy)
+        dists, idxs = self.query_tree(X, y)
 
-        # Convert indices to IDs and store.
-        self.data['Neighbours'] = [self.to_ids(idx[1:]) for idx in idxs]
+        # Convert indices to IDs and store.  Store non-zero distances.
+        neighbours = []
+        distances = []
+        for cidxs, cdists in zip(idxs, dists):
+            wanted = (slice(1, None, None) if cdists[0] == 0.
+                      else slice(None, -1, None))
+            neighbours.append(list(self.df_ptc['Centreline ID'][cidxs[wanted]]
+                                   .values))
+            distances.append(cdists[wanted])
 
-        # Store non-zero distances.
-        self.data['Distances'] = [d[1:] for d in dists]
+        self.data['Neighbours'] = neighbours
+        self.data['Distances'] = distances
 
 
 class NeighbourLonLatEuclidean(NeighbourLonLatBase):

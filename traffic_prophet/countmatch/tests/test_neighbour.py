@@ -12,8 +12,9 @@ class TestNeighbourLonLatEuclidean:
     """Tests Euclidean file-based neighbour finder.  Also tests base class."""
 
     def setup(self):
-        # There are only 11 items, so this orders all other points by distance.
-        self.nle = nbr.NeighbourLonLatEuclidean(SAMPLE_LONLAT, 10)
+        # 890 and 104870 are permanent count locations.
+        self.nle = nbr.NeighbourLonLatEuclidean(
+            SAMPLE_LONLAT, 2, [890, 104870])
 
     def test_initialization(self):
         assert self.nle.data.shape == (11, 3)
@@ -80,8 +81,9 @@ class TestNeighbourLonLatEuclidean:
 class TestNeighbourLonLatManhattan:
 
     def setup(self):
-        # There are only 11 items, so this orders all other points by distance.
-        self.nlm = nbr.NeighbourLonLatManhattan(SAMPLE_LONLAT, 10)
+        # 890 and 104870 are permanent count locations.
+        self.nlm = nbr.NeighbourLonLatManhattan(
+            SAMPLE_LONLAT, 2, [890, 104870])
 
     def test_getxy(self):
         lons = self.nlm.data['Lon'].values
