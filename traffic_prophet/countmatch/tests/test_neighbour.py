@@ -46,7 +46,7 @@ class TestNeighbourLonLatEuclidean:
 
         assert np.allclose(outs, self.nle.get_xy(lons, lats))
 
-    def test_getneighbours(self):
+    def test_findneighbours(self):
         # Check that we're using the correct metric.
         assert isinstance(self.nle._metric,
                           skln.dist_metrics.EuclideanDistance)
@@ -64,7 +64,7 @@ class TestNeighbourLonLatEuclidean:
         ids = np.array([890, 104870])
 
         # Run neighbour finder.
-        self.nle.get_neighbours()
+        self.nle.find_neighbours()
 
         # Check that the results are identical (take advantage of the fact that
         # index is just range(11)).
@@ -75,6 +75,14 @@ class TestNeighbourLonLatEuclidean:
                                   ids[closest_arg[i, s:]])
             assert np.allclose(self.nle.data.at[i, 'Distances'],
                                distmtx_sorted[i, s:])
+
+    def test_getneighbours(self):
+        self.nle.find_neighbours()
+        for i in range(self.nle.data.shape[0]):
+            nbs, dists = self.nle.get_neighbours(
+                self.nle.data.at[i, 'Centreline ID'])
+            assert np.array_equal(nbs, self.nle.data.at[i, 'Neighbours'])
+            assert np.array_equal(dists, self.nle.data.at[i, 'Distances'])
 
 
 class TestNeighbourLonLatManhattan:
@@ -112,7 +120,7 @@ class TestNeighbourLonLatManhattan:
         ids = np.array([890, 104870])
 
         # Run neighbour finder.
-        self.nlm.get_neighbours()
+        self.nlm.find_neighbours()
 
         # Check that the results are identical (take advantage of the fact that
         # index is just range(11)).

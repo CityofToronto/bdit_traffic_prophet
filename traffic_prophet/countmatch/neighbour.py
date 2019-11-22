@@ -96,7 +96,7 @@ class NeighbourLonLatBase(NeighbourBase):
         # This will retrieve itself, so ask for N_neighbours + 1.
         return btree.query(X, k=n)
 
-    def get_neighbours(self):
+    def find_neighbours(self):
         # Transform data to physical grid.
         X = self.get_xy(self.data['Lon'].values, self.data['Lat'].values)
         y = self.get_xy(self.df_ptc['Lon'].values, self.df_ptc['Lat'].values)
@@ -119,6 +119,12 @@ class NeighbourLonLatBase(NeighbourBase):
 
         self.data['Neighbours'] = neighbours
         self.data['Distances'] = distances
+
+    def get_neighbours(self, centreline_id):
+        # Just handle single IDs for now.
+        idx = self.to_idxs(centreline_id)
+        return (self.data.loc[idx, 'Neighbours'],
+                self.data.loc[idx, 'Distances'])
 
 
 class NeighbourLonLatEuclidean(NeighbourLonLatBase):
