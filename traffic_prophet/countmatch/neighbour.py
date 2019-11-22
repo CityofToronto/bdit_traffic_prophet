@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import sklearn.neighbors as skln
+import operator
 
 from .. import cfg
 from .. import conn
@@ -68,7 +69,14 @@ class NeighbourLonLatBase(NeighbourBase):
         return self.lonlat_to_xy(lon, lat)
 
     def to_idxs(self, ids):
-        return self._id_to_idx[ids].values
+        # If the ID is a single integer, return the integer.  Otherwise return
+        # values of a sliced Series.
+        try:
+            operator.index(ids)
+        except TypeError:
+            return self._id_to_idx[ids].values
+        else:
+            return self._id_to_idx[ids]
 
     def query_tree(self, X, y, n):
         """Build a tree to determine nearest points in y from points in X.

@@ -19,10 +19,17 @@ class TestNeighbourLonLatEuclidean:
         assert self.nle.data.shape == (11, 3)
         assert np.array_equal(self.nle.data.columns,
                               np.array(['Centreline ID', 'Lon', 'Lat']))
+
+    def test_to_idxs(self):
         # Check that we can convert from IDs to indices.
         assert np.array_equal(
             self.nle.data.index.values,
             self.nle.to_idxs(self.nle.data['Centreline ID'].values))
+
+        # Check that we can pass in single IDs.
+        for cidx in np.random.choice(self.nle.data.index.values, size=10):
+            assert cidx == self.nle.to_idxs(
+                self.nle.data.at[cidx, 'Centreline ID'])
 
     def test_getxy(self):
         # Also implicitly tests lonlat_to_xy.
