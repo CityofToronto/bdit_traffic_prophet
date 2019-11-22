@@ -1,5 +1,4 @@
 import numpy as np
-import sklearn.metrics as sklm
 import sklearn.neighbors as skln
 
 from .. import neighbour as nbr
@@ -20,10 +19,10 @@ class TestNeighbourLonLatEuclidean:
         assert self.nle.data.shape == (11, 3)
         assert np.array_equal(self.nle.data.columns,
                               np.array(['Centreline ID', 'Lon', 'Lat']))
-        # Check that we can convert from indices to IDs and back again.
+        # Check that we can convert from IDs to indices.
         assert np.array_equal(
             self.nle.data.index.values,
-            self.nle.to_idxs(self.nle.to_ids(self.nle.data.index.values)))
+            self.nle.to_idxs(self.nle.data['Centreline ID'].values))
 
     def test_getxy(self):
         # Also implicitly tests lonlat_to_xy.
@@ -48,7 +47,14 @@ class TestNeighbourLonLatEuclidean:
         # Manually calculate pair-pair distances.
         xy = self.nle.get_xy(self.nle.data['Lon'].values,
                              self.nle.data['Lat'].values)
-        distmtx = sklm.pairwise_distances(xy, metric='euclidean')
+        distmtx = np.array(
+            [((xy[:, 0] - xy[7, 0])**2 + (xy[:, 1] - xy[7, 1])**2)**0.5,
+             ((xy[:, 0] - xy[9, 0])**2 + (xy[:, 1] - xy[9, 1])**2)**0.5]).T
+        closest_arg = np.argsort(distmtx)
+        distmtx_sorted = distmtx[
+            np.arange(distmtx.shape[0], dtype=int)[:, np.newaxis],
+            closest_arg]
+        ids = np.array([890, 104870])
 
         # Run neighbour finder.
         self.nle.get_neighbours()
@@ -56,26 +62,12 @@ class TestNeighbourLonLatEuclidean:
         # Check that the results are identical (take advantage of the fact that
         # index is just range(11)).
         for i in range(distmtx.shape[0]):
-            assert np.array_equal(
-                self.nle.to_idxs(self.nle.data.at[i, 'Neighbours']),
-                np.argsort(distmtx[i])[1:])
-            assert np.sort(distmtx[i])[0] == 0.
+            # For PTCs don't compare the first value.
+            s = 1 if i in (7, 9) else 0
+            assert np.array_equal(self.nle.data.at[i, 'Neighbours'],
+                                  ids[closest_arg[i, s:]])
             assert np.allclose(self.nle.data.at[i, 'Distances'],
-                               np.sort(distmtx[i])[1:])
-
-        # Just to show our estimate method is sensible, also check
-        # haversine distances.
-        hvrdistmtx = (
-            sklm.pairwise.haversine_distances(
-                np.radians(self.nle.data[['Lat', 'Lon']].values)) *
-            self.nle._r_earth)
-        for i in range(hvrdistmtx.shape[0]):
-            assert np.array_equal(
-                self.nle.to_idxs(self.nle.data.at[i, 'Neighbours']),
-                np.argsort(hvrdistmtx[i])[1:])
-            assert np.allclose(self.nle.data.at[i, 'Distances'],
-                               np.sort(hvrdistmtx[i])[1:],
-                               rtol=1e-3, atol=1e-5)
+                               distmtx_sorted[i, s:])
 
 
 class TestNeighbourLonLatManhattan:
@@ -103,7 +95,14 @@ class TestNeighbourLonLatManhattan:
         # Manually calculate pair-pair distances.
         xy = self.nlm.get_xy(self.nlm.data['Lon'].values,
                              self.nlm.data['Lat'].values)
-        distmtx = sklm.pairwise_distances(xy, metric='manhattan')
+        distmtx = np.array(
+            [np.abs(xy[:, 0] - xy[7, 0]) + np.abs(xy[:, 1] - xy[7, 1]),
+             np.abs(xy[:, 0] - xy[9, 0]) + np.abs(xy[:, 1] - xy[9, 1])]).T
+        closest_arg = np.argsort(distmtx)
+        distmtx_sorted = distmtx[
+            np.arange(distmtx.shape[0], dtype=int)[:, np.newaxis],
+            closest_arg]
+        ids = np.array([890, 104870])
 
         # Run neighbour finder.
         self.nlm.get_neighbours()
@@ -111,8 +110,9 @@ class TestNeighbourLonLatManhattan:
         # Check that the results are identical (take advantage of the fact that
         # index is just range(11)).
         for i in range(distmtx.shape[0]):
-            assert np.array_equal(
-                self.nlm.to_idxs(self.nlm.data.at[i, 'Neighbours']),
-                np.argsort(distmtx[i])[1:])
+            # For PTCs don't compare the first value.
+            s = 1 if i in (7, 9) else 0
+            assert np.array_equal(self.nlm.data.at[i, 'Neighbours'],
+                                  ids[closest_arg[i, s:]])
             assert np.allclose(self.nlm.data.at[i, 'Distances'],
-                               np.sort(distmtx[i])[1:])
+                               distmtx_sorted[i, s:])

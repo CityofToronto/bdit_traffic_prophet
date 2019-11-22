@@ -70,7 +70,7 @@ class NeighbourLonLatBase(NeighbourBase):
     def to_idxs(self, ids):
         return self._id_to_idx[ids].values
 
-    def query_tree(self, X, y):
+    def query_tree(self, X, y, n):
         """Build a tree to determine nearest points in y from points in X.
 
         Parameters
@@ -80,25 +80,31 @@ class NeighbourLonLatBase(NeighbourBase):
             second latitude.
         y : numpy.ndarray
             Array of neighbour points, with the same format as X.
+        n : int
+            Number of neighbours to retrieve.
 
         """
         btree = skln.BallTree(y, metric=self._metric)
         # This will retrieve itself, so ask for N_neighbours + 1.
-        return btree.query(X, k=min(self._n_neighbours + 1, y.shape[0]))
+        return btree.query(X, k=n)
 
     def get_neighbours(self):
         # Transform data to physical grid.
         X = self.get_xy(self.data['Lon'].values, self.data['Lat'].values)
         y = self.get_xy(self.df_ptc['Lon'].values, self.df_ptc['Lat'].values)
         # Query tree.
-        dists, idxs = self.query_tree(X, y)
+        n = min(self._n_neighbours + 1, y.shape[0])
+        dists, idxs = self.query_tree(X, y, n)
 
-        # Convert indices to IDs and store.  Store non-zero distances.
+        # Store neighbour data.
         neighbours = []
         distances = []
         for cidxs, cdists in zip(idxs, dists):
+            # Return only non-zero neighbours.  If we need to return every
+            # PTC in our data, allow PTCs to have one fewer neighbour than
+            # STTCs.
             wanted = (slice(1, None, None) if cdists[0] == 0.
-                      else slice(None, -1, None))
+                      else slice(None, None if n == y.shape[0] else -1, None))
             neighbours.append(list(self.df_ptc['Centreline ID'][cidxs[wanted]]
                                    .values))
             distances.append(cdists[wanted])
