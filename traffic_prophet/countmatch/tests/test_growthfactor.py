@@ -14,22 +14,22 @@ class TestGrowthFactor:
 
     @hyp.given(slp=hyp.strategies.floats(min_value=-2., max_value=2.))
     @hyp.settings(max_examples=30)
-    def test_exponential_factor_fit(self, slp):
+    def test_exponential_rate_fit(self, slp):
         # Create a generic exponential curve.
         x = np.linspace(1.5, 2.7, 100)
         y = np.exp(slp * x)
-        result = gf.exponential_factor_fit(x, y,
-                                           {"year": x[0], "aadt": y[0]})
+        result = gf.exponential_rate_fit(x, y,
+                                         {"year": x[0], "aadt": y[0]})
         assert np.abs(result.params[0] - slp) < 0.01
 
     @hyp.given(slp=hyp.strategies.floats(min_value=-2., max_value=2.),
                y0=hyp.strategies.floats(min_value=-2., max_value=2.))
     @hyp.settings(max_examples=30)
-    def test_linear_factor_fit(self, slp, y0):
+    def test_linear_rate_fit(self, slp, y0):
         # Create a generic line.
         x = np.linspace(0.5, 3.7, 100)
         y = slp * x + y0
-        result = gf.linear_factor_fit(x, y)
+        result = gf.linear_rate_fit(x, y)
         assert np.abs(result.params[1] - slp) < 0.01
 
     def test_perm_count(self):
@@ -60,7 +60,7 @@ class TestGrowthFactor:
                      aadt['Year'].values - aadt['Year'].values[0]).fit()
         ptc_perm.fit_growth()
         assert ptc_perm._fit_type == 'Exponential'
-        assert np.isclose(ptc_perm.growth_factor, fit.params[0])
+        assert np.isclose(ptc_perm.growth_factor, np.exp(fit.params[0]))
 
         # PTC -890 only has one year.
         ptc_raw = rdr.ptcs[-890]
@@ -93,7 +93,8 @@ class TestGrowthFactor:
         ptc_perm.fit_growth()
         assert ptc_perm._fit_type == 'Linear'
         assert np.isclose(ptc_perm.growth_factor,
-                          fit.params[1] * 52. / ptc_raw.data['AADT'].iat[0, 0])
+                          1. + (fit.params[1] * 52. /
+                                ptc_raw.data['AADT'].iat[0, 0]))
 
     def test_get_growth_factors(self):
         # Test that using gf.get_growth_factors actually cycles through all

@@ -6,7 +6,7 @@ import statsmodels.api as sm
 from . import reader
 
 
-def exponential_factor_fit(year, aadt, ref_vals):
+def exponential_rate_fit(year, aadt, ref_vals):
     """Calculate year-on-year exponential growth rate :math:`r` for ADT.
 
     Parameters
@@ -47,7 +47,7 @@ def exponential_factor_fit(year, aadt, ref_vals):
     return model.fit()
 
 
-def linear_factor_fit(week, wadt):
+def linear_rate_fit(week, wadt):
     """OLS regression to estimate the linear growth rate within a single year.
 
     ADT for week :math:`t`, :math:`A_\mathrm{t}` is assumed to follow
@@ -120,31 +120,27 @@ class PermCount(reader.Count):
             aadt = self.get_aadt()
 
             # Perform exponential fit.
-            self._fit = exponential_factor_fit(
+            self._fit = exponential_rate_fit(
                 aadt['Year'].values,
                 aadt['AADT'].values,
                 {'year': aadt.at[0, 'Year'], 'aadt': aadt.at[0, 'AADT']})
 
             # Populate growth factor.
-            self.growth_factor = self._fit.params[0]
+            self.growth_factor = np.exp(self._fit.params[0])
             self.base_year = int(aadt.at[0, 'Year'])
         else:
             self._fit_type = 'Linear'
 
             # Process week vs. weekly averaged ADT.
             wadt = self.get_wadt()
-            self._fit = linear_factor_fit(wadt['Week'].values,
-                                          wadt['WADT'].values)
+            self._fit = linear_rate_fit(wadt['Week'].values,
+                                        wadt['WADT'].values)
 
             # Convert linear weekly fit to yearly exponential fit (iffy logic).
             aadt_info = self.data['AADT'].reset_index()
-            self.growth_factor = (self._fit.params[1] * 52. /
-                                  aadt_info['AADT'].values[0])
+            self.growth_factor = 1. + (self._fit.params[1] * 52. /
+                                       aadt_info['AADT'].values[0])
             self.base_year = aadt_info['Year'].values[0]
-
-    def predict_growth(self, years):
-        return np.exp(self.growth_factor *
-                      (years.astype(float) - self.base_year))
 
 
 def get_growth_factors(rdr):
