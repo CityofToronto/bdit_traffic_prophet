@@ -1,14 +1,3 @@
-#28
-
-SELECT A.* FROM 
-(SELECT X.intersection_uid, X.intersection_name, X.geom AS intersection_point, Y.geo_id, Y.lf_name, 
- Y.geom AS centreline, ST_Distance(Y.geom,X.geom) AS distance_from_point,
-ROW_NUMBER() OVER (PARTITION BY X.intersection_uid ORDER BY ST_Distance(Y.geom,X.geom)) rank
-FROM miovision_api.intersections X, gis.centreline Y) A
-WHERE A.rank IN (1,2,3,4)
-ORDER BY A.intersection_uid, A.rank  
-
-*****
 --to find `fnode` and `tnode` matched to a miovision intersection to be used in function
 CREATE TABLE jchew.miovision_centreline AS 
     SELECT  X.intersection_uid, X.intersection_name, X.int_id, X.geom AS point,
@@ -50,7 +39,7 @@ SELECT X.volume_15min_uid AS volume_id,
 FROM miovision_api.volumes_15min X
 LEFT JOIN jchew.miovision_centreline Y
 ON X.intersection_uid = Y.intersection_uid AND X.leg = Y.road_dir
-    WHERE datetime_bin::date BETWEEN '2019-05-01' AND '2019-06-01'  --pulling it month by month from May 2019 onwards
+    WHERE datetime_bin::date BETWEEN '2019-05-01' AND '2019-05-31'  --pulling it month by month from May 2019 onwards
     AND X.classification_uid IN (1,4,5,8)                           --light vehicles & trucks & workvan only
     AND X.intersection_uid IN (1,2,3,5,9,11,18,21,25,26,28,30,31)   --13 selected intersections only
     AND Y.geo_id IS NOT NULL                                        --to filter out some zero bins that were created for invalid movements
