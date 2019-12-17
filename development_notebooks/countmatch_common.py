@@ -38,25 +38,33 @@ def get_citywide_growth_factor(rdr, multi_year=False):
                     if v.data['AADT'].shape[0] > (1 if multi_year else 0)])
 
 
-def get_neighbours(tc, ptcs, nb, single_direction=True):
+def get_neighbours(tc, ptcs, nb, n_neighbours=5, single_direction=True):
     """Find neighbouring PTCs, optionally restricting to same direction."""
     neighbours = nb.get_neighbours(tc.centreline_id)[0]
     if single_direction:
         neighbour_ptcs = [ptcs[n] for n in
-                          [-nbrs for nbrs in neighbours] + neighbours
-                          if n in ptcs.keys()][:10]
-
-        if len(neighbour_ptcs) != 10:
-            raise ValueError("invalid number of available PTC locations "
-                             "for {0}".format(tc.count_id))
-
-    else:
-        neighbour_ptcs = [ptcs[n] for n in
                           [tc.direction * nbrs for nbrs in neighbours]
-                          if n in ptcs.keys()][:5]
+                          if n in ptcs.keys()][:n_neighbours]
+    else:
+        neighbours = neighbours[:n_neighbours]
+        neighbour_ptcs = [ptcs[n] for n in
+                          [-nbrs for nbrs in neighbours] + neighbours
+                          if n in ptcs.keys()]
 
-        if len(neighbour_ptcs) != 5:
-            raise ValueError("invalid number of available PTC locations "
-                             "for {0}".format(tc.count_id))
+    if len(neighbour_ptcs) != (1 if single_direction else 2) * n_neighbours:
+        raise ValueError("invalid number of available PTC locations "
+                         "for {0}".format(tc.count_id))
 
     return neighbour_ptcs
+
+
+def get_closest_year(sttc_years, ptc_years):
+    """Find closest year to an STTC count available at a PTC location."""
+    if isinstance(sttc_years, np.ndarray):
+        # Outer product to determine absolute difference between
+        # STTC years and PTC years.
+        mindiff_arg = np.argmin(abs(sttc_years[:,np.newaxis] - ptc_years),
+                                axis=1)
+        return ptc_years[mindiff_arg]
+    # If sttc_years is a single value, can just do a standard argmin.
+    return ptc_years[np.argmin(abs(sttc_years - ptc_years))]

@@ -83,25 +83,23 @@ def mse_preprocess_ptc(p):
     p.data['MSE Annual-DoW Averages'] = ptc_mse_ydow
 
 
-def get_normalized_seasonal_patterns(tc, ptcs, nb, want_year,
-                                     single_direction=True):
-    """Get the normalized seasonal pattern for a count.
-
-    For STTCs, get best estimate normalized patterns and corresponding PTC
-    normalized patterns to check for MSE (Eqn. 6 in Bagheri).  For PTCs, get
-    best estimate from nearby PTCs and check as a part of validation.
-    """
+def get_normalized_seasonal_patterns(
+        tc, ptcs, nb, want_year, n_neighbours=5, single_direction=True):
+    """Get the normalized seasonal pattern for a count."""
 
     # Find neighbouring PTCs by first finding neighbouring centreline IDs,
     # then checking if either direction exists in rptcs.
-    neighbour_ptcs = get_neighbours(tc, ptcs, nb,
-                                    single_direction=single_direction)
+    neighbour_ptcs = cmc.get_neighbours(
+        tc, ptcs, nb, n_neighbours=n_neighbours,
+        single_direction=single_direction)
 
     # Declare the columns in the final saved data frame.
     tc_msedata = []
 
     if tc.is_permanent:
-        tc_dc = tc.data['Daily Count'].reset_index()
+        # We shouldn't be allowing PTCs to be passed into this right now.
+        # tc_dc = tc.data['Daily Count'].reset_index()
+        raise ValueError("don't pass PTCs into this function!")
     else:
         tc_dc = tc.data.reset_index()
     tc_dc['Day of Week'] = tc_dc['Date'].dt.dayofweek
@@ -111,69 +109,88 @@ def get_normalized_seasonal_patterns(tc, ptcs, nb, want_year,
 
         for p in neighbour_ptcs:
 
-            if rdow in p.mse_pp['MSE_yDoW'].index.levels[0]:
-                unique_years = p.mse_pp['MSE_yDoW'].loc[rdow].index.values
-                closest_year = unique_years[np.argmin(
-                    np.abs(unique_years - ryear))]
+            # Assign temporary variables to make the code below succinct.
+            ptc_mse_ydow = p.data['MSE Annual-DoW Averages']
+            ptc_mse_y = p.data['MSE Annual Averages']
 
-                (day_to_aadt_ratio_avg, madt_avg, dom_avg, domadt_avg) = (
-                    p.mse_pp['MSE_yDoW'].loc[(rdow, closest_year)])
+            # If day of week exists in annual-DoW table...
+            if rdow in ptc_mse_ydow.index.levels[0]:
+                # Obtain available years for DoW and find closest year to
+                # STTC observation.
+                closest_year = cmc.get_closest_year(
+                    ryear, ptc_mse_ydow.loc[rdow].index.values)
+                tc_msedata_row = ptc_mse_ydow.loc[(rdow, closest_year)].values
             else:
-                # Levels contain all unique years regardless if each is
-                # available for every day-of-week.
-                unique_years = p.mse_pp['MSE_yDoW'].index.levels[1].values
-                closest_year = unique_years[np.argmin(
-                    np.abs(unique_years - ryear))]
+                # If not, use annual average.
+                closest_year = cmc.get_closest_year(
+                    ryear, ptc_mse_y.index.values)
+                tc_msedata_row = ptc_mse_y.loc[closest_year].values
 
-                (day_to_aadt_ratio_avg, madt_avg, dom_avg, domadt_avg) = (
-                    p.mse_pp['MSE_y'].loc[closest_year])
-            
-            if madt_avg is np.nan:
-                raise ValueError("ummmmm, this can't be NaN.")
+            if np.nan in tc_msedata_row:
+                raise ValueError("nan discovered during matching {0} with "
+                                 "{1}.".format(tc.count_id, p.count_id))
 
             aadt_closest_year = p.data['AADT'].at[closest_year, 'AADT']
 
-            tc_year.append(ryear)
-            tc_dayofyear.append(row['Day of Year'])
-            tc_ptcid.append(p.count_id)
-            tc_day_to_aadt_ratio_avg.append(day_to_aadt_ratio_avg)
-            tc_madt_avg.append(madt_avg)
-            tc_dom_avg.append(dom_avg)
-            tc_domadt_avg.append(domadt_avg)
-            tc_closest_year.append(closest_year)
-            tc_aadt_closest_year.append(aadt_closest_year)
+            tc_msedata.append(
+                (ryear, row['Day of Year'], p.count_id) +
+                tuple(tc_msedata_row) + (closest_year, aadt_closest_year))
 
-    tc_mse = pd.DataFrame({
-        'Year': tc_year,
-        'Day of Year': tc_dayofyear,
-        'PTC ID': tc_ptcid,
-        'PTC Day-to-AADT Ratio': tc_day_to_aadt_ratio_avg,
-        'PTC MADT Avg.': tc_madt_avg,
-        'PTC DoM Factor Avg.': tc_dom_avg,
-        'PTC DoMADT Avg.': tc_domadt_avg,
-        'PTC Closest Year AADT': tc_aadt_closest_year
-    })
+    tc_mse = pd.DataFrame(
+        tc_msedata,
+        columns=('Year', 'Day of Year', 'PTC ID', 'PTC Day-to-AADT Ratio',
+                 'PTC MADT Avg.', 'PTC DoM Factor Avg.', 'PTC DoMADT Avg.',
+                 'PTC Closest Year', 'PTC Closest Year AADT'))
 
-    tc_mse = pd.merge(tc_dc, tc_mse, on=('Year', 'Day of Year'))
+    if tc_mse.shape[0] != (n_neighbours * tc_dc.shape[0]):
+        raise ValueError("missing or added rows in tc_mse for "
+                         "{0}.".format(tc.count_id))
+
+    return pd.merge(tc_dc, tc_mse, on=('Year', 'Day of Year'))
+
+
+def get_aadt_estimate_for_sttc(tc, rdr, citywide_growth_factor, want_year):
 
     # I disagree with this, but line 95 of DoMSTTC.m seems to do it.
-    mean_tc_count = tc_dc['Daily Count'].mean()
+    mean_tc_count = tc.tc_mse['Daily Count'].mean()
 
-    tc_mse['AADT_prelim'] = (
-        mean_tc_count * tc_mse['PTC Day-to-AADT Ratio'] *
-        growth_rate_citywide**(want_year - tc_mse['Year']))
-    tc_mse['MADT_pj'] = (
-        tc_mse['Daily Count'] * tc_mse['PTC DoM Factor Avg.'] *
-        growth_rate_citywide**(want_year - tc_mse['Year']))
-    tc_mse['MF_STTC'] = tc_mse['MADT_pj'] / tc_mse['AADT_prelim']
-    tc_mse['MF_PTC'] = (tc_mse['PTC MADT Avg.'] /
-                        tc_mse['PTC Closest Year AADT'])
+    # Get estimates for STTC AADT and MADT.
+    tc.tc_mse['AADT_prelim'] = (
+        mean_tc_count * tc.tc_mse['PTC Day-to-AADT Ratio'] *
+        citywide_growth_factor**(want_year - tc.tc_mse['Year']))
+    tc.tc_mse['MADT_pj'] = (
+        tc.tc_mse['Daily Count'] * tc.tc_mse['PTC DoM Factor Avg.'] *
+        citywide_growth_factor**(want_year - tc.tc_mse['Year']))
 
-    tc.tc_mse = tc_mse
+    # Determine mean square deviation between normalized monthly patterns.
+    tc.tc_mse['MF_STTC'] = tc.tc_mse['MADT_pj'] / tc.tc_mse['AADT_prelim']
+    tc.tc_mse['MF_PTC'] = (tc.tc_mse['PTC MADT Avg.'] /
+                           tc.tc_mse['PTC Closest Year AADT'])
+    tc.tc_mse['Square Deviation'] = (
+        tc.tc_mse['MF_STTC'] - tc.tc_mse['MF_PTC'])**2
+
+    # Determine minimum MSE between STTC and each PTC.
+    dijs = (tc.tc_mse
+            .groupby('PTC ID')[['Square Deviation', 'PTC Day-to-AADT Ratio']]
+            .mean())
+    ptcid_mmse = dijs['Square Deviation'].idxmin()
+    dij_mmseptc = dijs.at[ptcid_mmse, 'PTC Day-to-AADT Ratio']
+
+    # Determine average daily count for most recent year to wanted year.
+    closest_year = cmc.get_closest_year(
+        want_year, tc.data.index.levels[0].values)
+    sttc_daily_count_cyavg = tc.data.loc[closest_year]['Daily Count'].mean()
+    aadt_estimate = (sttc_daily_count_cyavg * dij_mmseptc *
+                     citywide_growth_factor**(want_year - closest_year))
+
+    return {'Count ID': tc.count_id, 'PTC ID': ptcid_mmse,
+            'D_ij': dij_mmseptc, 'Closest Year': closest_year,
+            'AADT Estimate': aadt_estimate}
 
 
-
-def estimate_aadts(rdr, nb, want_year, progress_bar=False):
+def estimate_aadts(rdr, nb, want_year, n_neighbours=5,
+                   single_direction=True,
+                   progress_bar=False):
 
     for p in tqdm(rdr.ptcs.values(),
                   desc='Calculating PTC annual/DoW averages',
@@ -185,3 +202,16 @@ def estimate_aadts(rdr, nb, want_year, progress_bar=False):
     for tc in tqdm(rdr.sttcs.values(),
                    desc='Calculating STTC normalized monthly patterns',
                    disable=(not progress_bar)):
+        tc.tc_mse = get_normalized_seasonal_patterns(
+            tc, rdr.ptcs, nb, want_year, n_neighbours=n_neighbours,
+            single_direction=single_direction)
+
+    aadt_estimates = []
+    for tc in tqdm(rdr.sttcs.values(),
+                   desc='Determining minimum MSE and estimating AADT',
+                   disable=(not progress_bar)):
+        aadt_estimates.append(
+            get_aadt_estimate_for_sttc(tc, rdr,
+                                       citywide_growth_factor, want_year))
+
+    return pd.DataFrame(aadt_estimates)
