@@ -104,7 +104,7 @@ def get_normalized_seasonal_patterns(
         tc_dc = tc.data.reset_index()
     tc_dc['Day of Week'] = tc_dc['Date'].dt.dayofweek
 
-    for i, row in tc_dc.iterrows():
+    for _, row in tc_dc.iterrows():
         ryear, rdow = row['Year'], row['Day of Week']
 
         for p in neighbour_ptcs:

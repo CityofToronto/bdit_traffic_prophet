@@ -100,16 +100,19 @@ def combine_estimators(sttc_estimates, ptc_estimates):
 
     # Create a single AADT column that contains both STTC and PTC data.  If
     # both STTC and , take the mean.
-    aadt_estimates['AADT'] = aadt_estimates['AADT_STTC']
-    aadt_estimates.loc[aadt_estimates['AADT_STTC'].isnull(), 'AADT'] = (
-        aadt_estimates.loc[aadt_estimates['AADT_STTC'].isnull(), 'AADT_PTC'])
-    bothnotnull = (aadt_estimates['AADT_STTC'].notnull() &
-                   aadt_estimates['AADT_PTC'].notnull())
-    aadt_estimates.loc[bothnotnull, 'AADT'] = (
-        aadt_estimates.loc[bothnotnull, ['AADT_STTC', 'AADT_PTC']]
+    aadt_estimates['AADT Estimate'] = aadt_estimates['AADT Estimate_STTC']
+    aadt_estimates.loc[aadt_estimates[
+        'AADT Estimate_STTC'].isnull(), 'AADT Estimate'] = (
+            aadt_estimates.loc[aadt_estimates['AADT Estimate_STTC'].isnull(),
+                               'AADT Estimate_PTC'])
+    bothnotnull = (aadt_estimates['AADT Estimate_STTC'].notnull() &
+                   aadt_estimates['AADT Estimate_PTC'].notnull())
+    aadt_estimates.loc[bothnotnull, 'AADT Estimate'] = (
+        aadt_estimates.loc[bothnotnull, ['AADT Estimate_STTC',
+                                         'AADT Estimate_PTC']]
         .mean(axis=1))
 
-    if aadt_estimates.isnull().any(axis=None):
+    if aadt_estimates['AADT Estimate'].isnull().any():
         raise ValueError("aadt_estimates contains NaNs")
 
     return aadt_estimates
