@@ -8,7 +8,7 @@ import countmatch_common as cmc
 def mse_preprocess_ptc(p):
     # Get ratio between AADT and each daily count.
     doyr = cmc.get_doyr(p)
-    
+
     # Number of days of the week in each year and month.  Fill NaNs with
     # 0.
     N_days = cmc.get_ndays(doyr)
@@ -192,26 +192,31 @@ def estimate_aadts(rdr, nb, want_year, n_neighbours=5,
                    single_direction=True,
                    progress_bar=False):
 
+    # Pre-calculate PTC averages.
     for p in tqdm(rdr.ptcs.values(),
-                  desc='Calculating PTC annual/DoW averages',
+                  desc='Calculating PTC averages',
                   disable=(not progress_bar)):
         mse_preprocess_ptc(p)
 
+    # Obtain citywide growth factor.
     citywide_growth_factor = cmc.get_citywide_growth_factor(rdr)
 
+    # Calculate STTC monthly patterns using `n_neighbours` nearest PTCs.
     for tc in tqdm(rdr.sttcs.values(),
-                   desc='Calculating STTC normalized monthly patterns',
+                   desc='Calculating STTC monthly patterns',
                    disable=(not progress_bar)):
         tc.tc_mse = get_normalized_seasonal_patterns(
             tc, rdr.ptcs, nb, want_year, n_neighbours=n_neighbours,
             single_direction=single_direction)
 
+    # Process nearest PTC comparisons to estimate AADT for each STTC.
     aadt_estimates = []
     for tc in tqdm(rdr.sttcs.values(),
-                   desc='Determining minimum MSE and estimating AADT',
+                   desc='Minimum MSE AADT estimate',
                    disable=(not progress_bar)):
         aadt_estimates.append(
             get_aadt_estimate_for_sttc(tc, rdr,
                                        citywide_growth_factor, want_year))
 
-    return pd.DataFrame(aadt_estimates)
+    return pd.DataFrame(aadt_estimates)[
+        ["Count ID", "PTC ID", "Closest Year", "D_ij", "AADT Estimate"]]

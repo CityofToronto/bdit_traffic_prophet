@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import sys
+from tqdm.auto import tqdm
 
 import countmatch_common as cmc
 
@@ -102,9 +103,9 @@ def get_factors_from_ptc_pinpoint(sttc, ptc):
     # Row-by-row search for closest D_ijd and DoM_ijd.
     closest_year_arr = []
     d_ijd_arr = []
-    dom_ijd_arr = []    
+    dom_ijd_arr = []
 
-    for i, row in unique_ijd.iterrows():
+    for _, row in unique_ijd.iterrows():
         closest_year, d_ijd, dom_ijd = pinpoint_factor_lookup(row, ptc)
         closest_year_arr.append(closest_year)
         d_ijd_arr.append(d_ijd)
@@ -176,23 +177,24 @@ def get_ptc_match(sttc, ptc):
     else:
         ptc_match = get_factors_from_ptc_pinpoint(sttc, ptc)
     if ptc_match.isnull().any(axis=None):
-        raise ValueError('found a NaN for', sttc.count_id)
+        raise ValueError("ptc_match for {0} contains NaNs"
+                         .format(sttc.count_id))
     return ptc_match
 
 
-def estimate_mse(ptc_match, sttc, ptc, wanted_year):
+def estimate_mse(ptc_match, ptc, want_year):
     ptc_match['MADT_est'] = (
         ptc_match['Daily Count'] * ptc_match['DoM_ijd'] *
-        ptc.growth_factor**(wanted_year - ptc_match['Year']))
+        ptc.growth_factor**(want_year - ptc_match['Year']))
     madt_est = pd.DataFrame(
         {'MADT_estimate': ptc_match.groupby('Month')['MADT_est'].mean()})
     madt_est['AADT_est'] = (
         ptc_match['Daily Count'] * ptc_match['D_ijd'] *
-        ptc.growth_factor**(wanted_year - ptc_match['Year'])).mean()
+        ptc.growth_factor**(want_year - ptc_match['Year'])).mean()
     madt_est['MF_STTC'] = madt_est['MADT_estimate'] / madt_est['AADT_est']
 
     ptc_closest_year = cmc.get_closest_year(
-        wanted_year, ptc.data['AADT'].index.values)
+        want_year, ptc.data['AADT'].index.values)
     madt_est['MF_PTC'] = (ptc.data['MADT'].loc[ptc_closest_year, 'MADT'] /
                           ptc.data['AADT'].loc[ptc_closest_year, 'AADT'])
 
@@ -200,44 +202,70 @@ def estimate_mse(ptc_match, sttc, ptc, wanted_year):
     if mse < sys.float_info.epsilon:
         mse = 0.
 
-    return mse, madt_est
+    return mse, ptc_match, madt_est
 
 
-def get_aadt_estimate_for_sttc(tc, ptcs, nb, wanted_year):
+def get_aadt_estimate_for_sttc(
+        tc, ptcs, nb, want_year, n_neighbours=5, single_direction=True,
+        override_growth_factor=False):
 
     # Find nearest neighbours in same direction.
     neighbour_ptcs = cmc.get_neighbours(
         tc, ptcs, nb, n_neighbours=n_neighbours,
         single_direction=single_direction)
-    
-    # Determine minimum MSE count of five closest neighbouring PTCs.
+
+    # Determine minimum MSE tables for closest neighbouring PTCs.
     mses = []
     for ptc in neighbour_ptcs:
-        mses.append(estimate_mse(tc, ptc, wanted_year))
+        ptc_match = get_ptc_match(tc, ptc)
+        mses.append(estimate_mse(ptc_match, ptc, want_year))
+    # Retrieve `ptc_match` table of minimum MSE PTC.
     mmse_ptc_match = min(mses, key=lambda x: x[0])[1]
+
+    growth_factor = (override_growth_factor if override_growth_factor
+                     else ptc.growth_factor)
 
     # Estimate AADT using most recent year of STTC counts and
     # MADT pattern of closest PTC.
-    closest_year = get_closest_year(
-        wanted_year, mmse_ptc_match['Year'].unique())
+    closest_year = cmc.get_closest_year(
+        want_year, mmse_ptc_match['Year'].unique())
     mmse_ptc_match_cy = mmse_ptc_match.loc[
         mmse_ptc_match['Year'] == closest_year, :]
     aadt_est_closest_year = (
         mmse_ptc_match_cy['Daily Count'] * mmse_ptc_match_cy['D_ijd'] *
-        ptc.growth_factor**(wanted_year - mmse_ptc_match_cy['Year'])).mean()
+        growth_factor**(want_year - mmse_ptc_match_cy['Year'])).mean()
 
     if np.isnan(aadt_est_closest_year):
-        raise ValueError('Found a NaN in outer loop', tc.count_id)
+        raise ValueError('estimated AADT for {0} is NaN', tc.count_id)
 
-    tc.aadt_estimate = aadt_est_closest_year
+    return (tc.count_id, aadt_est_closest_year)
 
 
-def countmatch(rdr):
+def estimate_aadts(rdr, nb, want_year, n_neighbours=5,
+                   single_direction=True, override_growth_factor=False,
+                   progress_bar=False):
     # Preprocess PTCs.
-    for ptc in rdr.ptcs.values():
+    for ptc in tqdm(rdr.ptcs.values(),
+                    desc='Preprocessing PTCs',
+                    disable=(not progress_bar)):
         get_Dijd(ptc)
         get_DoMi(ptc)
         get_available_years(ptc)
         get_unstacked_factors(ptc)
-    
-    ptc_match = get_ptc_match(sttc, ptc)
+
+    if override_growth_factor:
+        citywide_growth_factor = cmc.get_citywide_growth_factor(rdr)
+
+    # Process nearest PTC comparisons to estimate AADT for each STTC.
+    aadt_estimates = []
+    for tc in tqdm(rdr.sttcs.values(),
+                   desc='Estimating STTC AADTs',
+                   disable=(not progress_bar)):
+        aadt_estimates.append(
+            get_aadt_estimate_for_sttc(
+                tc, rdr.ptcs, nb, want_year,
+                n_neighbours=n_neighbours, single_direction=single_direction,
+                override_growth_factor=citywide_growth_factor))
+
+    return pd.DataFrame(aadt_estimates,
+                        columns=('Count ID', 'AADT Estimate'))

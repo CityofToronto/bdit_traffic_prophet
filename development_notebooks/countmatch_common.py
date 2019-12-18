@@ -63,17 +63,53 @@ def get_closest_year(sttc_years, ptc_years):
     if isinstance(sttc_years, np.ndarray):
         # Outer product to determine absolute difference between
         # STTC years and PTC years.
-        mindiff_arg = np.argmin(abs(sttc_years[:,np.newaxis] - ptc_years),
+        mindiff_arg = np.argmin(abs(sttc_years[:, np.newaxis] - ptc_years),
                                 axis=1)
         return ptc_years[mindiff_arg]
     # If sttc_years is a single value, can just do a standard argmin.
     return ptc_years[np.argmin(abs(sttc_years - ptc_years))]
 
 
-def aadt_estimator_for_ptcs(rptcs, wanted_year):  
-    for tc in rptcs.values():
+def aadt_estimator_for_ptcs(rdr, wanted_year,
+                            override_growth_factor=False):
+    ptc_estimates = []
+    for tc in rdr.ptcs.values():
         closest_year = get_closest_year(
             wanted_year, tc.data['AADT'].index.values)
-        tc.aadt_estimate = (
+        growth_factor = (override_growth_factor if override_growth_factor
+                         else tc.growth_factor)
+        aadt_estimate = (
             tc.data['AADT'].loc[closest_year, 'AADT'] *
-            tc.growth_factor**(wanted_year - closest_year))
+            growth_factor**(wanted_year - closest_year))
+
+        if np.isnan(aadt_estimate):
+            raise ValueError('estimated AADT for {0} is NaN', tc.count_id)
+
+        ptc_estimates.append((tc.count_id, aadt_estimate))
+
+    return pd.DataFrame(ptc_estimates,
+                        columns=('Count ID', 'AADT Estimate'))
+
+
+def combine_estimators(sttc_estimates, ptc_estimates):
+
+    # Outer join estimates together.
+    aadt_estimates = pd.merge(sttc_estimates, ptc_estimates,
+                              how='outer', on='Count ID',
+                              suffixes=('_STTC', '_PTC'))
+
+    # Create a single AADT column that contains both STTC and PTC data.  If
+    # both STTC and , take the mean.
+    aadt_estimates['AADT'] = aadt_estimates['AADT_STTC']
+    aadt_estimates.loc[aadt_estimates['AADT_STTC'].isnull(), 'AADT'] = (
+        aadt_estimates.loc[aadt_estimates['AADT_STTC'].isnull(), 'AADT_PTC'])
+    bothnotnull = (aadt_estimates['AADT_STTC'].notnull() &
+                   aadt_estimates['AADT_PTC'].notnull())
+    aadt_estimates.loc[bothnotnull, 'AADT'] = (
+        aadt_estimates.loc[bothnotnull, ['AADT_STTC', 'AADT_PTC']]
+        .mean(axis=1))
+
+    if aadt_estimates.isnull().any(axis=None):
+        raise ValueError("aadt_estimates contains NaNs")
+
+    return aadt_estimates
