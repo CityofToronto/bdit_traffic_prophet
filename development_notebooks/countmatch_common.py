@@ -68,3 +68,12 @@ def get_closest_year(sttc_years, ptc_years):
         return ptc_years[mindiff_arg]
     # If sttc_years is a single value, can just do a standard argmin.
     return ptc_years[np.argmin(abs(sttc_years - ptc_years))]
+
+
+def aadt_estimator_for_ptcs(rptcs, wanted_year):  
+    for tc in rptcs.values():
+        closest_year = get_closest_year(
+            wanted_year, tc.data['AADT'].index.values)
+        tc.aadt_estimate = (
+            tc.data['AADT'].loc[closest_year, 'AADT'] *
+            tc.growth_factor**(wanted_year - closest_year))
