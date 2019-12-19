@@ -90,7 +90,9 @@ def get_aadt_estimate_for_sttc(
     if np.isnan(aadt_est_closest_year):
         raise ValueError('estimated AADT for {0} is NaN', tc.count_id)
 
-    return (tc.count_id, aadt_est_closest_year)
+    return (tc.count_id, [x.count_id for x in neighbour_ptcs],
+            error_metrics, neighbour_ptcs[i_minerr].count_id,
+            growth_factor, closest_year, aadt_est_closest_year)
 
 
 def estimate_aadts(rdr, nb, want_year, n_neighbours=5,
@@ -127,5 +129,7 @@ def estimate_aadts(rdr, nb, want_year, n_neighbours=5,
                 n_neighbours=n_neighbours, single_direction=single_direction,
                 override_growth_factor=citywide_growth_factor))
 
-    return pd.DataFrame(aadt_estimates,
-                        columns=('Count ID', 'AADT Estimate'))
+    return pd.DataFrame(
+        aadt_estimates,
+        columns=('Count ID', 'Nearest PTCS', 'Errors', 'PTC ID',
+                 'Growth Factor', 'Most Recent Year', 'AADT Estimate'))
