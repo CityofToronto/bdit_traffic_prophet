@@ -115,8 +115,9 @@ def estimate_aadts(rdr, nb, want_year, n_neighbours=5,
         cmh.get_available_years(ptc)
         cmh.get_unstacked_factors(ptc)
 
-    if override_growth_factor:
-        citywide_growth_factor = cmc.get_citywide_growth_factor(rdr)
+    citywide_growth_factor = (
+        cmc.get_citywide_growth_factor(rdr) if override_growth_factor
+        else override_growth_factor)
 
     # Process nearest PTC comparisons to estimate AADT for each STTC.
     aadt_estimates = []
