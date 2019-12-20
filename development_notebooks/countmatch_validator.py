@@ -39,10 +39,17 @@ def get_year_mapping(sttc_years, ptc_years):
     return year_mapping
 
 
+def shift_year(d, ptc_year):
+    try:
+        return d.replace(year=ptc_year)
+    except ValueError:
+        return d.replace(year=ptc_year, day=(d.day - 1))
+
+
 def get_sample_request(sttc, year, ptc_year):
     date_sample = pd.DataFrame({
         'Date': sttc.data.loc[year]['Date'].apply(
-            lambda x: x.replace(year=ptc_year))})
+            shift_year, args=(ptc_year,))})
     date_sample['Month'] = date_sample['Date'].dt.month
     date_sample['Day of Week'] = date_sample['Date'].dt.month
     return (date_sample.groupby('Month')['Date']
@@ -73,7 +80,7 @@ def data_imprinter(ptc, sttc):
         for _, row in sample_request.iterrows():
             idx = nearest_idx(row['Start Date'])
             iloc_idxs += list(range(idx, idx + row['N_days']))
-        
+
         # Prune indices that go beyond bounds of `ptc_daily_counts`.
         iloc_idxs = np.array(iloc_idxs)
         iloc_idxs = iloc_idxs[iloc_idxs < ptc_daily_counts.shape[0]]
@@ -89,7 +96,7 @@ def data_imprinter(ptc, sttc):
         pd.concat(daily_counts), is_permanent=False)
 
 
-def generate_test_data(rdr):
+def generate_test_data(rdr, restrict_to_year=False):
 
     # Retrieve and shuffle STTC count IDs.
     sttc_count_ids = np.array(sorted(rdr.sttcs.keys()))
@@ -98,8 +105,18 @@ def generate_test_data(rdr):
     np.random.shuffle(sttc_negative_count_ids)
     np.random.shuffle(sttc_positive_count_ids)
 
-    sttcs = []
-    for ptc in rdr.ptcs.values():
+    # Use a subset of PTCs that have the year we're looking for available, or
+    # just use all available PTCs.
+    ptcs = ([x for x in rdr.ptcs.values()
+             if restrict_to_year in x.data['AADT'].index] if restrict_to_year
+            else rdr.ptcs.values())
+
+    if not len(ptcs):
+        raise ValueError("no PTCs available with year {0}!"
+                         .format(restrict_to_year))
+
+    test_sttcs = []
+    for ptc in ptcs:
         sttc_count_ids = (sttc_negative_count_ids
                           if ptc.direction < 0 else sttc_positive_count_ids)
         # Select an STTC.
@@ -118,16 +135,77 @@ def generate_test_data(rdr):
         # Remove the STTC ID from future consideration.
         sttc_count_ids = np.delete(sttc_count_ids, i)
 
-        sttcs.append([ptc.count_id, data_imprinter(ptc, sttc)])
+        test_sttcs.append([ptc.count_id, data_imprinter(ptc, sttc)])
 
     rdr_dummy = namedtuple('rdr_dummy', ['ptcs', 'sttcs'])
-    return rdr_dummy(ptcs=rdr.ptcs, sttcs=dict(sttcs))
+    return rdr_dummy(ptcs=rdr.ptcs, sttcs=dict(test_sttcs))
 
 
-def generate_test_database(rdr, n_sets=100, progress_bar=False):
+def generate_test_database(rdr, n_sets=100, restrict_to_year=False,
+                           progress_bar=False):
     datasets = []
     for _ in tqdm(range(n_sets),
                   desc='Generating data',
                   disable=(not progress_bar)):
-        datasets.append(generate_test_data(rdr))
+        datasets.append(
+            generate_test_data(rdr, restrict_to_year=restrict_to_year))
     return datasets
+
+
+def run_algorithm_on_test_data(dataset, algo, algo_args, nb, want_year,
+                               progress_bar=False):
+
+    raw_estimates = []
+    for dset in tqdm(dataset, desc=("Processing {0}".format(want_year)),
+                     disable=(not progress_bar)):
+        raw_estimates.append(
+            algo(dset, nb, want_year, **algo_args))
+
+    # Get AADT estimates for each run in dataset.
+    aadts = pd.concat(
+        [(x.sort_values('Count ID')[['Count ID', 'AADT Estimate']]
+          .set_index('Count ID', drop=True))
+         for x in raw_estimates], axis=1)
+    aadts.columns = list(range(len(raw_estimates)))
+
+    # Match AADT ground truths to count IDs.
+    aadts_gt = [dset.ptcs[x].data['AADT'].at[want_year, 'AADT']
+                for x in aadts.index.values]
+    aadts['Ground Truth'] = aadts_gt
+
+    abs_errors = np.abs(aadts[list(range(len(raw_estimates)))].values -
+                        aadts[['Ground Truth']].values)
+
+    aadts['MAE'] = abs_errors.mean(axis=1)
+    aadts['STDAE'] = abs_errors.std(axis=1)
+
+    aadts['Year'] = want_year
+
+    return aadts
+
+
+def validation(rdr, nb, algo, algo_args={},
+               n_sets=100, progress_bar=False):
+
+    # Obtain the set of all years where we have PTCs.
+    all_available_PTC_years = np.unique(np.concatenate(
+        [x.data['AADT'].index.values for x in rdr.ptcs.values()]))
+
+    datasets = []
+    for year in all_available_PTC_years:
+        if progress_bar:
+            print("For year {0}".format(year))
+        datasets.append((
+            year,
+            generate_test_database(rdr, n_sets=n_sets,
+                                   restrict_to_year=year,
+                                   progress_bar=progress_bar)))
+
+    aadt_validation = []
+    for want_year, dataset in datasets:
+        aadt_validation.append(
+            run_algorithm_on_test_data(
+                dataset, algo, algo_args, nb, want_year,
+                progress_bar=progress_bar))
+
+    return datasets, aadt_validation
