@@ -6,8 +6,8 @@ from ...data import SAMPLE_ZIP
 from .. import reader
 
 
-class TestAnnualCount:
-    """Test preprocessing routines in AnnualCount."""
+class TestRawAnnualCount:
+    """Test preprocessing routines in RawAnnualCount."""
 
     def setup(self):
         rdr = reader.Reader(SAMPLE_ZIP)
@@ -18,7 +18,7 @@ class TestAnnualCount:
 
     def test_regularize_timeseries(self):
         # Test processing a file that has no rounding issues.
-        ac = reader.AnnualCount(999, 1000, -1, 2010, None)
+        ac = reader.RawAnnualCount(999, 1000, -1, 2010, None)
         crd = ac.regularize_timeseries(self.ptc_data)
         assert (sorted(crd.columns) ==
                 sorted(['Timestamp', 'Date', 'Count']))
@@ -45,7 +45,7 @@ class TestAnnualCount:
         assert np.isclose(crd2.at[30, 'Count'], 93., rtol=1e-10)
 
     def test_process_15min_count_data(self):
-        ac = reader.AnnualCount(999, 1000, -1, 2010, None)
+        ac = reader.RawAnnualCount(999, 1000, -1, 2010, None)
         crd = ac.regularize_timeseries(self.ptc_data)
         daily_count = ac.process_15min_count_data(crd)
         ac.reset_daily_count_index(daily_count)
@@ -81,7 +81,7 @@ class TestAnnualCount:
 
     def test_is_permanent(self):
         known_ptc_ids = [890, 104870]
-        ac = reader.AnnualCount(999, 1000, -1, 2010, None)
+        ac = reader.RawAnnualCount(999, 1000, -1, 2010, None)
         for c in self.counts:
             if c['centreline_id'] in known_ptc_ids:
                 assert ac.is_permanent_count(self.ptc_data)
@@ -89,7 +89,7 @@ class TestAnnualCount:
                 assert not ac.is_permanent_count(self.sttc_data)
 
     def test_process_permanent_count_data(self):
-        ac = reader.AnnualCount(999, 1000, -1, 2010, None)
+        ac = reader.RawAnnualCount(999, 1000, -1, 2010, None)
         # We'll use only one day from December to check what the algorithm will
         # do in the case of sparse data.
         temp_data = self.ptc_data.copy()
@@ -141,14 +141,14 @@ class TestAnnualCount:
         assert np.isclose(po['AADT'], aadt, rtol=1e-10)
 
     def test_from_raw_data(self):
-        sttc_ac = reader.AnnualCount.from_raw_data(self.sttc_data)
-        assert isinstance(sttc_ac, reader.AnnualCount)
+        sttc_ac = reader.RawAnnualCount.from_raw_data(self.sttc_data)
+        assert isinstance(sttc_ac, reader.RawAnnualCount)
         assert sttc_ac.centreline_id == self.sttc_data['centreline_id']
         assert sttc_ac.direction == self.sttc_data['direction']
         assert sttc_ac.year == self.sttc_data['year']
         assert isinstance(sttc_ac.data, pd.DataFrame)
 
-        ptc_ac = reader.AnnualCount.from_raw_data(self.ptc_data)
+        ptc_ac = reader.RawAnnualCount.from_raw_data(self.ptc_data)
         assert isinstance(ptc_ac.data, dict)
         assert (sorted(ptc_ac.data.keys()) ==
                 sorted(['Daily Count', 'MADT', 'DoMADT',
@@ -215,9 +215,9 @@ class TestReader:
 
     def test_append_counts(self):
         rdr = reader.Reader(SAMPLE_ZIP)
-        counts_2010 = [reader.AnnualCount.from_raw_data(c)
+        counts_2010 = [reader.RawAnnualCount.from_raw_data(c)
                        for c in rdr.get_zipreader(SAMPLE_ZIP['2010'])]
-        counts_2012 = [reader.AnnualCount.from_raw_data(c)
+        counts_2012 = [reader.RawAnnualCount.from_raw_data(c)
                        for c in rdr.get_zipreader(SAMPLE_ZIP['2012'])]
         ptcs = {}
         sttcs = {}
@@ -248,11 +248,11 @@ class TestReader:
 
     def test_unify_counts(self):
         rdr = reader.Reader(SAMPLE_ZIP)
-        counts_2010 = [reader.AnnualCount.from_raw_data(c)
+        counts_2010 = [reader.RawAnnualCount.from_raw_data(c)
                        for c in rdr.get_zipreader(SAMPLE_ZIP['2010'])]
-        counts_2011p = [reader.AnnualCount.from_raw_data(c)
+        counts_2011p = [reader.RawAnnualCount.from_raw_data(c)
                         for c in rdr.get_zipreader(SAMPLE_ZIP['2011p'])]
-        counts_2012 = [reader.AnnualCount.from_raw_data(c)
+        counts_2012 = [reader.RawAnnualCount.from_raw_data(c)
                        for c in rdr.get_zipreader(SAMPLE_ZIP['2012'])]
         ptcs = {}
         sttcs = {}
