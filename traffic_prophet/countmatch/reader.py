@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 import zipfile
 import glob
-import warnings
 
 from .. import cfg
 from .. import conn
@@ -142,6 +141,7 @@ class ReaderZip(ReaderBase):
         # Copy file and round timestamps to the nearest 15 minutes.
         crd = self.regularize_timeseries(rd)
         # Get daily total count values.
+        crd['Date'] = crd['Timestamp'].dt.date
         crdg = crd.groupby('Date')
         # Get the number of bins per day and drop days with fewer than the
         # minimum allowed number of counts.
@@ -193,9 +193,6 @@ class ReaderZip(ReaderBase):
         else:
             crd.sort_values('Timestamp', inplace=True)
             crd['Count'] = crd['Count'].astype(np.float64)
-
-        # Required for calculating averaged data.
-        crd['Date'] = crd['Timestamp'].dt.date
 
         return crd
 
@@ -249,9 +246,8 @@ class ReaderPostgres(ReaderBase):
 
     def preprocess_count_data(self, rd):
         """Minor preprocessing of raw count data."""
-        daily_count = rd['data'].copy()
-        self.reset_daily_count_index(daily_count)
-        rd['data'] = daily_count
+        # Not idempotent.
+        self.reset_daily_count_index(rd['data'])
         return rd
 
     def get_sqlreader(self, year):
