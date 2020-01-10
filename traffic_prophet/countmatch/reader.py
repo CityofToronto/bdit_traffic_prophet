@@ -51,7 +51,7 @@ class ReaderBase:
         # Store permanent and temporary stations.
         self.counts = None
         self.source = source
-        self.cfg = cfg.cm
+        self.cfg = cfgcm
 
     def read(self):
         """Read source data into a dictionary of counts."""
