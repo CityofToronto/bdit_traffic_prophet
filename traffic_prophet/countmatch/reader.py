@@ -275,10 +275,7 @@ class ReaderPostgres(ReaderBase):
 
 
 def read(source):
-
     rdr = (ReaderPostgres(source) if isinstance(source, conn.Connection)
            else ReaderZip(source))
-
     rdr.read()
-
     return rdr
