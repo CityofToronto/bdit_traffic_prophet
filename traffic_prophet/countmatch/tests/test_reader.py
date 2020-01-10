@@ -296,3 +296,14 @@ class TestReaderPostgres:
         # Check that index values represent days of year.
         assert np.array_equal(rd['data'].index.values,
                               rd['data']['Date'].dt.dayofyear)
+
+
+class TestReaderFunction:
+    """Test reader function for returning the right class."""
+
+    def test_reader(self):
+        rdr = reader.read(SAMPLE_ZIP['2011p'])
+        assert sorted(rdr.counts.keys()) == [170, 104870]
+        assert rdr.counts[104870].data.shape == (3, 2)
+        assert (rdr.counts[104870].data.index.levels[0].values ==
+                np.array([2011]))

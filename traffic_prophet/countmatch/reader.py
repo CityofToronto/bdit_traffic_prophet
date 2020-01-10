@@ -21,7 +21,7 @@ class Count:
 
 
 class RawAnnualCount(Count):
-    """Storage for total and average daily traffic."""
+    """Storage for raw daily traffic for one year."""
 
     def __init__(self, count_id, centreline_id, direction, year,
                  data, is_permanent=False):
@@ -41,10 +41,6 @@ class RawAnnualCount(Count):
             is a `pandas.DataFrame` with 'Count' column and either 'Timestamp'
             or 'Date' column.
         """
-        if 'Date' not in rd['data'].columns:
-            raise ValueError("raw input data missing 'Date' column.")
-
-        # Save to a new object.
         return cls(rd['centreline_id'] * rd['direction'], rd['centreline_id'],
                    rd['direction'], rd['year'], rd['data'])
 
@@ -62,7 +58,7 @@ class ReaderBase:
         counts = {}
         # Read counts from source.
         self.read_source(counts)
-        # Combine counts at the same location and different years.
+        # Combine counts at the same location over multiple years.
         self.unify_counts(counts)
         self.counts = counts
 
@@ -137,7 +133,7 @@ class ReaderZip(ReaderBase):
             self.append_counts(current_counts, counts)
 
     def preprocess_count_data(self, rd):
-        """Calculates total daily traffic from raw count data."""
+        """Calculates total daily traffic from 15-minute raw count data."""
         # Copy file and round timestamps to the nearest 15 minutes.
         crd = self.regularize_timeseries(rd)
         # Get daily total count values.
@@ -239,7 +235,7 @@ class ReaderPostgres(ReaderBase):
             current_counts = [
                 RawAnnualCount.from_raw_data(
                     self.preprocess_count_data(c))
-                for c in self.get_sqlreader(year)]
+                for c in self.get_pgreader(year)]
 
             # Append counts to processed count dicts.
             self.append_counts(current_counts, counts)
@@ -250,7 +246,7 @@ class ReaderPostgres(ReaderBase):
         self.reset_daily_count_index(rd['data'])
         return rd
 
-    def get_sqlreader(self, year):
+    def get_pgreader(self, year):
         with self.source.connect() as db_con:
             sql_cmd = (
                 ("SELECT centreline_id, direction, count_date, daily_count "
