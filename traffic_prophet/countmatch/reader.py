@@ -47,10 +47,11 @@ class RawAnnualCount(Count):
 
 class ReaderBase:
 
-    def __init__(self, source):
+    def __init__(self, source, cfgcm=cfg.cm):
         # Store permanent and temporary stations.
         self.counts = None
         self.source = source
+        self.cfg = cfg.cm
 
     def read(self):
         """Read source data into a dictionary of counts."""
@@ -65,17 +66,16 @@ class ReaderBase:
     def read_source(self, counts):
         raise NotImplementedError
 
+    def has_enough_data(self, data):
+        """Checks if there is enough data to be a usable count."""
+        return data.shape[0] >= self.cfg['min_stn_count']
+
     @staticmethod
     def reset_daily_count_index(daily_count):
         """In-place reset of `daily_count` index to be the day of year."""
         daily_count.set_index(
             pd.Index(daily_count['Date'].dt.dayofyear, name='Day of Year'),
             inplace=True)
-
-    @staticmethod
-    def has_enough_data(data):
-        """Checks if there is enough data to be a usable count."""
-        return data.shape[0] >= cfg.cm['min_stn_count']
 
     @staticmethod
     def append_counts(current_counts, counts):
@@ -107,14 +107,14 @@ class ReaderBase:
 
 class ReaderZip(ReaderBase):
 
-    def __init__(self, source):
+    def __init__(self, source, cfgcm=cfg.cm):
         if type(source) == str:
             source = glob.glob(source)
         elif type(source) == dict:
             source = [source[k] for k in sorted(source.keys())]
         source = sorted(source)
 
-        super().__init__(source)
+        super().__init__(source, cfgcm=cfgcm)
 
     def read_source(self, counts):
         """Read zip file contents into RawAnnualCount objects."""
@@ -141,7 +141,7 @@ class ReaderZip(ReaderBase):
         crdg = crd.groupby('Date')
         # Get the number of bins per day and drop days with fewer than the
         # minimum allowed number of counts.
-        valids = crdg['Count'].count() >= cfg.cm['min_counts_in_day']
+        valids = crdg['Count'].count() >= self.cfg['min_counts_in_day']
         # Calculate daily counts.
         daily_count = pd.DataFrame({
             'Daily Count': 96. * crdg['Count'].mean()[valids]})
@@ -231,7 +231,7 @@ class ReaderPostgres(ReaderBase):
     def read_source(self, counts):
         """Read PostgreSQL table contents into RawAnnualCount objects."""
         # Cycle through all relevant years.
-        for year in range(cfg.cm['min_year'], cfg.cm['max_year'] + 1):
+        for year in range(self.cfg['min_year'], self.cfg['max_year'] + 1):
             current_counts = [
                 RawAnnualCount.from_raw_data(
                     self.preprocess_count_data(c))
@@ -278,4 +278,5 @@ def read(source):
     rdr = (ReaderPostgres(source) if isinstance(source, conn.Connection)
            else ReaderZip(source))
     rdr.read()
+
     return rdr
