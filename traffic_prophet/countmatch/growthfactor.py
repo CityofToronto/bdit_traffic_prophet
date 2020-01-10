@@ -76,21 +76,12 @@ def linear_rate_fit(week, wadt):
     return model.fit()
 
 
-class PermCount(reader.Count):
+class GrowthFactorBase:
     """Class to hold permanent count data and calculate growth factors."""
 
-    def __init__(self, count_id, centreline_id, direction, data):
-        super().__init__(count_id, centreline_id, direction, data,
-                         is_permanent=True)
-        self.growth_factor = None
-        self.base_year = None
-        self._fit = None
-        self._fit_type = None
-
-    @classmethod
-    def from_ptc_count_object(cls, ptc):
-        # Data will be passed by reference.
-        return cls(ptc.count_id, ptc.centreline_id, ptc.direction, ptc.data)
+    def __init__(self, tc):
+        # Store parent class.
+        self.tc = tc
 
     def get_aadt(self):
         aadt = self.data['AADT'].reset_index()
@@ -127,7 +118,6 @@ class PermCount(reader.Count):
 
             # Populate growth factor.
             self.growth_factor = np.exp(self._fit.params[0])
-            self.base_year = int(aadt.at[0, 'Year'])
         else:
             self._fit_type = 'Linear'
 
@@ -140,10 +130,3 @@ class PermCount(reader.Count):
             aadt_info = self.data['AADT'].reset_index()
             self.growth_factor = 1. + (self._fit.params[1] * 52. /
                                        aadt_info['AADT'].values[0])
-            self.base_year = aadt_info['Year'].values[0]
-
-
-def get_growth_factors(rdr):
-    for key in rdr.ptcs.keys():
-        rdr.ptcs[key] = PermCount.from_ptc_count_object(rdr.ptcs[key])
-        rdr.ptcs[key].fit_growth()

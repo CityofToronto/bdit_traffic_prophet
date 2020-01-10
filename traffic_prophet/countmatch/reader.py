@@ -47,11 +47,11 @@ class RawAnnualCount(Count):
 
 class ReaderBase:
 
-    def __init__(self, source, cfgcm=cfg.cm):
+    def __init__(self, source, cfg=cfg.cm):
         # Store permanent and temporary stations.
         self.counts = None
         self.source = source
-        self.cfg = cfgcm
+        self.cfg = cfg
 
     def read(self):
         """Read source data into a dictionary of counts."""
@@ -68,7 +68,7 @@ class ReaderBase:
 
     def has_enough_data(self, data):
         """Checks if there is enough data to be a usable count."""
-        return data.shape[0] >= self.cfg['min_stn_count']
+        return data.shape[0] >= self.cfg['min_count']
 
     @staticmethod
     def reset_daily_count_index(daily_count):
@@ -107,14 +107,14 @@ class ReaderBase:
 
 class ReaderZip(ReaderBase):
 
-    def __init__(self, source, cfgcm=cfg.cm):
+    def __init__(self, source, cfg=cfg.cm):
         if type(source) == str:
             source = glob.glob(source)
         elif type(source) == dict:
             source = [source[k] for k in sorted(source.keys())]
         source = sorted(source)
 
-        super().__init__(source, cfgcm=cfgcm)
+        super().__init__(source, cfg=cfg)
 
     def read_source(self, counts):
         """Read zip file contents into RawAnnualCount objects."""

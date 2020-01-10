@@ -9,8 +9,8 @@ from .. import growthfactor as gf
 from ...data import SAMPLE_ZIP
 
 
-class TestGrowthFactor:
-    """Test growth factor calculation."""
+class TestFitters:
+    """Test fitters."""
 
     @hyp.given(slp=hyp.strategies.floats(min_value=-2., max_value=2.))
     @hyp.settings(max_examples=30)
@@ -31,6 +31,10 @@ class TestGrowthFactor:
         y = slp * x + y0
         result = gf.linear_rate_fit(x, y)
         assert np.abs(result.params[1] - slp) < 0.01
+
+
+class TestPermCount:
+    """Test permanent count preprocessing class."""
 
     def test_perm_count(self):
 
