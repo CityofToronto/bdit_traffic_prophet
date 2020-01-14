@@ -14,6 +14,7 @@ class GFRegistrar(type):
     See https://github.com/mhvk/baseband.
 
     """
+
     _registry = GF_REGISTRY
 
     def __init__(cls, name, bases, dct):
@@ -23,7 +24,7 @@ class GFRegistrar(type):
             if not hasattr(cls, "_fit_type"):
                 raise ValueError("must define a `_fit_type`.")
             elif cls._fit_type in GFRegistrar._registry:
-                raise ValueError("EDV {0} already registered in "
+                raise ValueError("name {0} already registered in "
                                  "GF_REGISTRY".format(cls._fit_type))
 
             GFRegistrar._registry[cls._fit_type] = cls
@@ -35,8 +36,6 @@ class GrowthFactor:
 
     def __new__(cls, proctype, *args, **kwargs):
         # __init__ has to be called manually!
-        # https://docs.python.org/3/reference/datamodel.html#object.__new__
-        # https://stackoverflow.com/questions/20221858/python-new-method-returning-something-other-than-class-instance
         self = super().__new__(GF_REGISTRY[proctype])
         self.__init__(*args, **kwargs)
         return self
@@ -176,7 +175,7 @@ class GrowthFactorWADTLin(GrowthFactorBase):
 
         # Convert linear weekly fit to yearly exponential fit (iffy logic).
         aadt_info = tc.data['AADT'].reset_index()
-        growth_factor = 1. + (fit_results[1] * 52. /
+        growth_factor = 1. + (fit_results.params[1] * 52. /
                               aadt_info['AADT'].values[0])
 
         return {'fit_type': 'Linear',
@@ -195,6 +194,6 @@ class GrowthFactorComposite(GrowthFactorBase):
         self.wadt_lin = GrowthFactorWADTLin()
 
     def fit_growth(self, tc):
-        if len(tc.data['AADT'].shape[0]) > 1:
+        if tc.data['AADT'].shape[0] > 1:
             return self.aadt_exp.fit_growth(tc)
         return self.wadt_lin.fit_growth(tc)

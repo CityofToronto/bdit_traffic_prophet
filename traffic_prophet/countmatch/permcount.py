@@ -1,8 +1,10 @@
 """Sift and process permanent counts."""
 
 import warnings
+from tqdm.auto import tqdm
 
 from . import base
+from . import derivedvals as dv
 from . import growthfactor as gf
 from .. import cfg
 
@@ -59,6 +61,7 @@ class PermCountProcessor:
         # PTCs because they reduce the accuracy of CountMatch.
         self.excluded_ids = (self.cfg['exclude_ptc_pos'] +
                              [-id for id in self.cfg['exclude_ptc_neg']])
+        self._disable_tqdm = not self.cfg['verbose']
 
     def partition_years(self, tc):
         """Partition data by year, and determine when `tc` is a PTC.
@@ -81,7 +84,7 @@ class PermCountProcessor:
             return []
 
         # Get number of days and months in each year.
-        mg = tc.data['Date'].dt.month.groupby(level=[0, ])
+        mg = tc.data['Date'].dt.month.groupby('Year')
         counts_per_year = mg.count()
         n_unique_months = mg.apply(lambda x: x.unique().shape[0])
 
@@ -103,19 +106,26 @@ class PermCountProcessor:
             warnings.warn("file only contains permanent counts!")
 
     def get_ptcs_sttcs(self, tcs):
-        for tc in tcs.counts:
+        tcs.ptcs = {}
+        tcs.sttcs = {}
+        for tc in tqdm(tcs.counts.values(),
+                       desc='Processing permanent counts',
+                       disable=self._disable_tqdm):
             perm_years = self.partition_years(tc)
             if len(perm_years):
                 tcs.ptcs[tc.count_id] = (
                     PermCount.from_count_object(tc, perm_years))
-                self.dvc.calculate(tc.ptcs[tc.count_id])
-                self.gfc.fit_growth(tc.ptcs[tc.count_id])
+                self.dvc.get_derived_vals(tcs.ptcs[tc.count_id])
+                self.gfc.fit_growth(tcs.ptcs[tc.count_id])
             else:
                 tcs.sttcs[tc.count_id] = tc
 
+        self.check_processed_count_integrity(tcs)
+
 
 def get_ptcs_sttcs(tcs):
-    dv_calc = None
+    dv_calc = dv.DerivedVals(cfg.cm['derived_vals_calculator'],
+                             **cfg.cm['derived_vals_settings'])
     gf_calc = gf.GrowthFactor(cfg.cm['growth_factor_calculator'],
                               **cfg.cm['growth_factor_settings'])
     ptcproc = PermCountProcessor(dv_calc, gf_calc)

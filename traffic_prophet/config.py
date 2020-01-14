@@ -4,6 +4,7 @@
 
 # For countmatch
 cm = {
+    'verbose': True,
     'min_count': 96,
     'min_counts_in_day': 24,
     'min_permanent_months': 12,
@@ -14,6 +15,8 @@ cm = {
     'exclude_ptc_pos': [446402, 7204532, 1145377, 30029635, 1147358, 106853,
                         1140996, 1797, 14177830, 30073989, 14189397,
                         440428, 14659261],
+    'derived_vals_calculator': 'Standard',
+    'derived_vals_settings': {},
     'growth_factor_calculator': 'Composite',
     'growth_factor_settings': {},
     'min_year': 2006,
