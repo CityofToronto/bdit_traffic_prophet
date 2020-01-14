@@ -232,7 +232,7 @@ class ReaderPostgres(ReaderBase):
 
     def preprocess_count_data(self, rd):
         """Minor preprocessing of raw count data."""
-        # Not idempotent.
+        # `reset_daily_count_index` alters rd.
         self.reset_daily_count_index(rd['data'])
         return rd
 
@@ -264,9 +264,10 @@ class ReaderPostgres(ReaderBase):
                        'year': year}
 
 
-def read(source):
-    rdr = (ReaderPostgres(source) if isinstance(source, conn.Connection)
-           else ReaderZip(source))
+def read(source, cfg=cfg.cm):
+    rdr = (ReaderPostgres(source, cfg=cfg)
+           if isinstance(source, conn.Connection)
+           else ReaderZip(source, cfg=cfg))
     rdr.read()
 
     return rdr

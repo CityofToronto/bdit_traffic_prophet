@@ -51,19 +51,23 @@ class GrowthFactorBase(metaclass=GFRegistrar):
         return aadt
 
     @staticmethod
-    def get_wadt(tc):
-        cdata = tc.data['Daily Count'].reset_index()
+    def get_wadt_py(tc):
+        """Get WADT for all full weeks within permanent years."""
+        cdata = tc.data['Daily Count'].loc[tc.perm_years, :].copy()
         # Overcomplicated groupby using the start of the week, as dt.week
         # returns the "week ordinal".  See https://stackoverflow.com/a/55890652
         cdata['Start of Week'] = (
             cdata['Date'] -
             cdata['Date'].dt.dayofweek * np.timedelta64(1, 'D'))
-        wadt = (cdata.groupby('Start of Week')['Daily Count']
+        wadt = (cdata.groupby(['Year', 'Start of Week'])['Daily Count']
                 .agg(['mean', 'count']))
-        wadt = wadt.loc[wadt['count'] == 7, ('mean',)]
-        wadt.reset_index(inplace=True)
-        wadt.columns = ('Start of Week', 'WADT')
-        wadt['Week'] = wadt['Start of Week'].dt.week.astype(float)
+        # Only keep full weeks.
+        wadt = wadt.loc[wadt['count'] == 7, ('mean',)].reset_index()
+        wadt.columns = ('Year', 'Start of Week', 'WADT')
+
+        start_year = wadt['Year'].min()
+        wadt['Week'] = (wadt['Start of Week'].dt.week.astype(float) +
+                        52. * (wadt['Year'] - start_year))
         return wadt
 
     def fit_growth(self, tc):
@@ -169,7 +173,7 @@ class GrowthFactorWADTLin(GrowthFactorBase):
 
     def fit_growth(self, tc):
         # Process week vs. weekly averaged ADT.
-        wadt = self.get_wadt(tc)
+        wadt = self.get_wadt_py(tc)
         fit_results = self.linear_rate_fit(wadt['Week'].values,
                                            wadt['WADT'].values)
 

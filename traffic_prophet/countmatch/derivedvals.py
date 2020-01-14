@@ -114,7 +114,7 @@ class DerivedValsBase(metaclass=DVRegistrar):
         d_ijd = (aadt['AADT'].values[:, np.newaxis] /
                  domadt.loc[perm_years, :].unstack(level=-1)).stack()
 
-        return domadt, dom_ijd, d_ijd, n_avail_days
+        return dom_ijd, d_ijd, n_avail_days
 
     def get_derived_vals(self, ptc):
         raise NotImplementedError
@@ -131,7 +131,7 @@ class DerivedValsStandard(DerivedValsBase):
         dca = self.preprocess_daily_counts(ptc.data['Daily Count'])
         madt = self.get_madt(dca)
         aadt = self.get_aadt_from_madt(madt, ptc.perm_years)
-        domadt, dom_ijd, d_ijd, n_avail_days = self.get_ratios(
+        dom_ijd, d_ijd, n_avail_days = self.get_ratios(
             dca, madt, aadt, ptc.perm_years)
 
         ptc.data['MADT'] = madt
