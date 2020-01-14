@@ -1,12 +1,6 @@
 from .. import base
 
 
-# from ...data import SAMPLE_ZIP
-# @pytest.fixture(scope="module", autouse=True)
-# def counts():
-#     return reader.read(SAMPLE_ZIP)
-
-
 class TestCount:
 
     def test_count(self):

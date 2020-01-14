@@ -7,20 +7,29 @@ from .. import base
 from .. import reader
 
 
+@pytest.fixture(scope="module")
+def rdr(cfgcm_test):
+    return reader.ReaderZip(SAMPLE_ZIP, cfg=cfgcm_test)
+
+
+@pytest.fixture(scope="module")
+def counts(rdr):
+    zr = rdr.get_zipreader(SAMPLE_ZIP['2010'])
+    return list(zr)
+
+
 class TestRawAnnualCount:
     """Test preprocessing routines in RawAnnualCount."""
 
-    def setup(self):
-        rdr = reader.ReaderZip(SAMPLE_ZIP)
+    def test_from_raw_data(self, rdr, mister_x):
         zr = rdr.get_zipreader(SAMPLE_ZIP['2010'])
-        self.data = rdr.preprocess_count_data(list(zr)[7])
+        data = rdr.preprocess_count_data(list(zr)[7])
 
-    def test_from_raw_data(self):
-        sttc_ac = reader.RawAnnualCount.from_raw_data(self.data)
+        sttc_ac = reader.RawAnnualCount.from_raw_data(data)
         assert isinstance(sttc_ac, reader.RawAnnualCount)
-        assert sttc_ac.centreline_id == self.data['centreline_id']
-        assert sttc_ac.direction == self.data['direction']
-        assert sttc_ac.year == self.data['year']
+        assert sttc_ac.centreline_id == data['centreline_id']
+        assert sttc_ac.direction == data['direction']
+        assert sttc_ac.year == data['year']
         assert isinstance(sttc_ac.data, pd.DataFrame)
 
 
@@ -30,20 +39,15 @@ class TestReaderZip:
     Also test ReaderBase, since that cannot easily be tested standalone.
     """
 
-    def setup(self):
-        rdr = reader.ReaderZip(SAMPLE_ZIP)
-        zr = rdr.get_zipreader(SAMPLE_ZIP['2010'])
-        self.counts = list(zr)
-
-    def test_initialization(self):
+    def test_initialization(self, cfgcm_test):
         expected_list = sorted(list(SAMPLE_ZIP.values()))
 
-        rdr = reader.ReaderZip(SAMPLE_ZIP)
+        rdr = reader.ReaderZip(SAMPLE_ZIP, cfg=cfgcm_test)
         assert rdr.source == expected_list
 
         # Try again but with a string.
         path = "/".join(SAMPLE_ZIP['2010'].split("/")[:-1]) + "/"
-        rdr = reader.ReaderZip(path + "15_min*.zip")
+        rdr = reader.ReaderZip(path + "15_min*.zip", cfg=cfgcm_test)
         assert rdr.source == expected_list
 
         # Try again but with a list.
@@ -51,14 +55,14 @@ class TestReaderZip:
                   path + "15_min_counts_2011_pos_sample.zip",
                   path + "15_min_counts_2012_neg_sample.zip",
                   path + "15_min_counts_2010_neg_sample.zip"]
-        rdr = reader.ReaderZip(sample)
+        rdr = reader.ReaderZip(sample, cfg=cfgcm_test)
         assert rdr.source == expected_list
 
-    def test_get_zipreader(self):
-        # self.counts was already generated at setup; this checks its output.
+    def test_get_zipreader(self, counts):
+        # counts was already generated at setup; this checks its output.
 
-        assert len(self.counts) == 8
-        assert ([c['filename'] for c in self.counts] ==
+        assert len(counts) == 8
+        assert ([c['filename'] for c in counts] ==
                 ['104870_11510_2010.txt',
                  '241_4372_2010.txt',
                  '252_4505_2010.txt',
@@ -67,30 +71,27 @@ class TestReaderZip:
                  '446378_2398_2010.txt',
                  '487_9229_2010.txt',
                  '890_17700_2010.txt'])
-        assert ([c['centreline_id'] for c in self.counts] ==
+        assert ([c['centreline_id'] for c in counts] ==
                 [104870, 241, 252, 410, 427, 446378, 487, 890])
-        assert ([c['direction'] for c in self.counts] ==
-                [-1 for i in range(len(self.counts))])
-        assert ([c['data'].shape for c in self.counts] ==
+        assert ([c['direction'] for c in counts] ==
+                [-1 for i in range(len(counts))])
+        assert ([c['data'].shape for c in counts] ==
                 [(30912, 2), (288, 2), (96, 2), (96, 2), (96, 2), (10752, 2),
                  (288, 2), (27072, 2)])
         assert np.array_equal(
-            self.counts[2]['data'].dtypes.values,
+            counts[2]['data'].dtypes.values,
             np.array([np.dtype('<M8[ns]'), np.dtype('int64')]))
-        assert (self.counts[2]['data'].at[3, 'Timestamp'] ==
+        assert (counts[2]['data'].at[3, 'Timestamp'] ==
                 pd.to_datetime('2010-06-09 00:45:00'))
-        assert self.counts[2]['data'].at[10, 'Count'] == 1
+        assert counts[2]['data'].at[10, 'Count'] == 1
 
         # TO DO: once we get a logger going, should probably also check using a
         # tmpdir that we can ignore and log counts too small to be used.
 
-    def test_regularize_timeseries(self):
-        # Test processing a file that has no rounding issues.
-        rdr = reader.ReaderZip(SAMPLE_ZIP)
-
+    def test_regularize_timeseries(self, rdr, counts):
         # counts[7] is -890 for 2010 (holdover from an earlier generation of
         # test suite).
-        ref_data = self.counts[7]
+        ref_data = counts[7]
 
         crd = rdr.regularize_timeseries(ref_data)
         assert (sorted(crd.columns) ==
@@ -102,7 +103,7 @@ class TestReaderZip:
                       ref_data['data']['Count'].astype(float))
 
         # Introduce some errors to counts[2] (also a holdover).
-        fake_data = self.counts[2].copy()
+        fake_data = counts[2].copy()
         # Do a deep copy just in case.
         fake_data['data'] = fake_data['data'].copy()
         fake_data['data'].at[30, 'Timestamp'] = (
@@ -111,17 +112,16 @@ class TestReaderZip:
         fake_data['data'].at[32, 'Timestamp'] = (
             pd.Timestamp('2010-06-09 07:51:12'))
         crd2 = rdr.regularize_timeseries(fake_data)
-        assert crd2.shape == (self.counts[2]['data'].shape[0] - 2, 2)
+        assert crd2.shape == (counts[2]['data'].shape[0] - 2, 2)
         assert np.array_equal(crd2['Timestamp'].dt.minute.unique(),
                               np.array([0, 15, 30, 45]))
         assert crd2.at[30, 'Timestamp'] == pd.Timestamp('2010-06-09 07:45:00')
         assert np.isclose(crd2.at[30, 'Count'], 93., rtol=1e-10)
 
-    def test_preprocess_count_data(self):
-        rdr = reader.ReaderZip(SAMPLE_ZIP)
-        ref = self.counts[7]
+    def test_preprocess_count_data(self, rdr, counts):
+        ref = counts[7]
         rd = ref.copy()
-        # Do a deep copy because preprocess_count_data is not idempotent.
+        # Do a deep copy because preprocess_count_data alters its arguments.
         rd['data'] = rd['data'].copy()
 
         rd = rdr.preprocess_count_data(rd)
@@ -159,8 +159,9 @@ class TestReaderZip:
         assert np.array_equal(rdp['data']['Date'].dt.dayofyear,
                               np.array([1, 3]))
 
-    def test_append_counts(self):
-        rdr = reader.ReaderZip(SAMPLE_ZIP)
+    def test_append_counts(self, cfgcm_test):
+        # Appending counts alters arguments, so can't rely on fixture here.
+        rdr = reader.ReaderZip(SAMPLE_ZIP, cfg=cfgcm_test)
         counts_2010 = [
             reader.RawAnnualCount.from_raw_data(
                 rdr.preprocess_count_data(c))
@@ -186,8 +187,8 @@ class TestReaderZip:
         assert counts_2010[0].data.equals(counts[-104870][0].data)
         assert counts_2012[4].data.equals(counts[-890][1].data)
 
-    def test_unify_counts(self):
-        rdr = reader.ReaderZip(SAMPLE_ZIP)
+    def test_unify_counts(self, cfgcm_test):
+        rdr = reader.ReaderZip(SAMPLE_ZIP, cfg=cfgcm_test)
         counts_2010 = [
             reader.RawAnnualCount.from_raw_data(
                 rdr.preprocess_count_data(c))
@@ -212,9 +213,9 @@ class TestReaderZip:
                 [-446378, -104870, -1978, -890, -487, -427, -410, -252, -241,
                  170, 104870])
         # Check that we've concatenated three years' data together.
-        # `unify_counts` is not idempotent and alters `counts`. Since those do
-        # not make copies of data from `counts_2010` and `counts_2012`, those
-        # are altered as well.  This only matters for testing, however.
+        # `unify_counts` alters `counts`.  Since those do not make copies of
+        # data from `counts_2010` and `counts_2012`, those are altered as well.
+        # This only matters for testing, however.
         assert counts[-104870].count_id == -104870
         assert counts[-104870].centreline_id == 104870
         assert counts[-104870].direction == -1
@@ -236,8 +237,8 @@ class TestReaderZip:
         assert not counts[170].is_permanent
         assert counts[170].data.equals(counts_2011p[0].data)
 
-    def test_read(self):
-        rdr = reader.ReaderZip(SAMPLE_ZIP)
+    def test_read(self, cfgcm_test):
+        rdr = reader.ReaderZip(SAMPLE_ZIP, cfg=cfgcm_test)
         rdr.read()
 
         assert (sorted(rdr.counts.keys()) ==
@@ -265,20 +266,15 @@ class TestReaderPostgres:
     requires a test Postgres DB to be set up during testing.
     """
 
-    def setup(self):
-        rdrz = reader.ReaderZip(SAMPLE_ZIP)
-        zr = rdrz.get_zipreader(SAMPLE_ZIP['2010'])
-        self.counts = list(zr)
-
     def test_initialization(self):
         rdr = reader.ReaderPostgres('Placeholder')
         assert rdr.counts is None
         assert rdr.source == 'Placeholder'
 
-    def test_preprocess_count_data(self):
-        rdr = reader.ReaderPostgres(SAMPLE_ZIP)
+    def test_preprocess_count_data(self, counts, cfgcm_test):
+        rdr = reader.ReaderPostgres(SAMPLE_ZIP, cfg=cfgcm_test)
         # Emulate daily count raw data from Postgres.
-        rd = self.counts[7].copy()
+        rd = counts[7].copy()
         rd['data'] = rd['data'].copy()
         rd['data']['Date'] = rd['data']['Timestamp'].dt.date
         crdg = rd['data'].groupby('Date')
@@ -302,8 +298,8 @@ class TestReaderPostgres:
 class TestReaderFunction:
     """Test reader function for returning the right class."""
 
-    def test_reader(self):
-        rdr = reader.read(SAMPLE_ZIP['2011p'])
+    def test_reader(self, cfgcm_test):
+        rdr = reader.read(SAMPLE_ZIP['2011p'], cfg=cfgcm_test)
         assert sorted(rdr.counts.keys()) == [170, 104870]
         assert rdr.counts[104870].data.shape == (3, 2)
         assert (rdr.counts[104870].data.index.levels[0].values ==
