@@ -5,22 +5,12 @@ import pandas as pd
 import zipfile
 import glob
 
+from . import base
 from .. import cfg
 from .. import conn
 
 
-class Count:
-
-    def __init__(self, count_id, centreline_id, direction,
-                 data, is_permanent=False):
-        self.count_id = count_id
-        self.centreline_id = int(centreline_id)
-        self.direction = int(direction)
-        self.is_permanent = bool(is_permanent)
-        self.data = data
-
-
-class RawAnnualCount(Count):
+class RawAnnualCount(base.Count):
     """Storage for raw daily traffic for one year."""
 
     def __init__(self, count_id, centreline_id, direction, year,
@@ -99,10 +89,10 @@ class ReaderBase:
                     [[item.year, ], _ctable.index],
                     names=['Year', _ctable.index.name])
             unified_data = pd.concat([c.data for c in counts[cid]])
-            counts[cid] = Count(counts[cid][0].count_id,
-                                counts[cid][0].centreline_id,
-                                counts[cid][0].direction,
-                                unified_data, is_permanent=False)
+            counts[cid] = base.Count(counts[cid][0].count_id,
+                                     counts[cid][0].centreline_id,
+                                     counts[cid][0].direction,
+                                     unified_data, is_permanent=False)
 
 
 class ReaderZip(ReaderBase):

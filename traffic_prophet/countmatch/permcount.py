@@ -1,14 +1,13 @@
-"""Determine permanent count year-on-year growth factors."""
+"""Sift and process permanent counts."""
 
-import numpy as np
-import statsmodels.api as sm
+import warnings
 
-from . import reader
+from . import base
 from . import growthfactor as gf
 from .. import cfg
 
 
-class PermCount(reader.Count):
+class PermCount(base.Count):
     """Class to hold permanent count data and calculate growth factors.
 
     Parameters
@@ -36,7 +35,7 @@ class PermCount(reader.Count):
         data = {'Daily Count': data}
         super().__init__(count_id, centreline_id, direction, data,
                          is_permanent=True)
-        self.perm_info = perm_years
+        self.perm_years = perm_years
 
     @classmethod
     def from_count_object(cls, tc, perm_years):
@@ -92,6 +91,17 @@ class PermCountProcessor:
 
         return perm_years
 
+    @staticmethod
+    def check_processed_count_integrity(tcs):
+        if not len(tcs.sttcs) + len(tcs.ptcs):
+            raise ValueError("no count file has sufficient data to use in "
+                             "the model!  Check configuration settings.")
+        elif not len(tcs.ptcs):
+            warnings.warn(
+                "no permanent counts read!  Check configuration settings.")
+        elif not len(tcs.sttcs):
+            warnings.warn("file only contains permanent counts!")
+
     def get_ptcs_sttcs(self, tcs):
         for tc in tcs.counts:
             perm_years = self.partition_years(tc)
@@ -105,7 +115,8 @@ class PermCountProcessor:
 
 
 def get_ptcs_sttcs(tcs):
-    dv_calc = SOME STUFF
-    gf_calc = SOME STUFF
+    dv_calc = None
+    gf_calc = gf.GrowthFactor(cfg.cm['growth_factor_calculator'],
+                              **cfg.cm['growth_factor_settings'])
     ptcproc = PermCountProcessor(dv_calc, gf_calc)
     ptcproc.get_ptcs_sttcs(tcs)

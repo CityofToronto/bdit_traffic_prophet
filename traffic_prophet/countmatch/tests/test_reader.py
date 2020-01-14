@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 
 from ...data import SAMPLE_ZIP
+from .. import base
 from .. import reader
 
 
@@ -242,7 +243,7 @@ class TestReaderZip:
         assert (sorted(rdr.counts.keys()) ==
                 [-446378, -104870, -1978, -890, -680, -487, -427, -410,
                  -252, -241, -170, 170, 104870])
-        assert isinstance(rdr.counts[-241], reader.Count)
+        assert isinstance(rdr.counts[-241], base.Count)
 
         # Check that all available years have been read in.
         included_years = []

@@ -14,7 +14,8 @@ cm = {
     'exclude_ptc_pos': [446402, 7204532, 1145377, 30029635, 1147358, 106853,
                         1140996, 1797, 14177830, 30073989, 14189397,
                         440428, 14659261],
-    'derived_values_calculator': ''
+    'growth_factor_calculator': 'Composite',
+    'growth_factor_settings': {},
     'min_year': 2006,
     'max_year': 2018
 }
