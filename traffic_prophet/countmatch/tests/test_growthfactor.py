@@ -56,30 +56,25 @@ class TestGrowthFactorBase:
         wadt_nov29 = (ptc_oneyear.data['Daily Count']
                       .loc[(2010, 333):(2010, 339), 'Daily Count'].mean())
         assert np.isclose(
-            (wadt_oy.loc[wadt_oy['Start of Week'] == '2010-06-14', 'WADT']
-             .values[0]), wadt_jun14)
+            wadt_oy.loc[wadt_oy['Week'] == 24, 'WADT'].values[0], wadt_jun14)
         assert np.isclose(
-            (wadt_oy.loc[wadt_oy['Start of Week'] == '2010-11-29', 'WADT']
-             .values[0]), wadt_nov29)
+            wadt_oy.loc[wadt_oy['Week'] == 48, 'WADT'].values[0], wadt_nov29)
 
         # For multiyear PTC, confirm we can reproduce data frame.
         wadt_my = self.gfb.get_wadt_py(ptc_multiyear)
 
-        ptc_multiyear_dc = ptc_multiyear.data['Daily Count'].loc[
-            ptc_multiyear.perm_years, :].copy()
-        ptc_multiyear_dc['Week'] = (
-            ptc_multiyear_dc['Date'] -
-            (ptc_multiyear_dc['Date'].dt.dayofweek *
-             np.timedelta64(1, 'D'))).dt.week
+        wadt_apr26_2010 = (ptc_multiyear.data['Daily Count']
+                           .loc[(2010, 116):(2010, 122), :])
+        wadt_my_apr26_2010 = wadt_my.loc[
+            (wadt_my['Year'] == 2010) & (wadt_my['Week'] == 17), :]
+        assert np.allclose(
+            wadt_my_apr26_2010[['WADT', 'Time']].values.ravel(),
+            np.array([wadt_apr26_2010['Daily Count'].mean(), 17.]))
 
-        wadt_ref = (ptc_multiyear_dc.loc[ptc_multiyear_dc['Week'] < 53, :]
-                    .groupby(['Year', 'Week']).agg(['mean', 'count']))
-        wadt_ref.columns = ('WADT', 'N_days')
-        wadt_ref = wadt_ref.loc[wadt_ref['N_days'] == 7, :].reset_index()
-
-        wadt_ref['Week'] = (wadt_ref['Week'].astype(float) +
-                            52. * (wadt_ref['Year'] - wadt_ref['Year'].min()))
-
-        # Check that all weeks with 7 days are in wadt.
-        assert np.array_equal(wadt_ref['Week'], wadt_my['Week'])
-        assert np.array_equal(wadt_ref['WADT'], wadt_my['WADT'])
+        wadt_oct15_2012 = (ptc_multiyear.data['Daily Count']
+                           .loc[(2012, 289):(2012, 295), :])
+        wadt_my_oct15_2012 = wadt_my.loc[
+            (wadt_my['Year'] == 2012) & (wadt_my['Week'] == 42), :]
+        assert np.allclose(
+            wadt_my_oct15_2012[['WADT', 'Time']].values.ravel(),
+            np.array([wadt_oct15_2012['Daily Count'].mean(), 146.]))
