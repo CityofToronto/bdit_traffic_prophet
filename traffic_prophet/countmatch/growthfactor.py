@@ -46,14 +46,15 @@ class GrowthFactorBase(metaclass=GFRegistrar):
 
     @staticmethod
     def get_aadt(tc):
-        aadt = tc.data['AADT'].reset_index()
+        """Get AADT (for permanent years)."""
+        aadt = tc.adts['AADT'].reset_index()
         aadt['Year'] = aadt['Year'].astype(float)
         return aadt
 
     @staticmethod
     def get_wadt_py(tc):
         """Get WADT for all full weeks within permanent years."""
-        cdata = tc.data['Daily Count'].loc[tc.perm_years, :].copy()
+        cdata = tc.data.loc[tc.perm_years, :].copy()
 
         # Corrective measure, as dt.week returns the "week ordinal".  See
         # https://stackoverflow.com/a/55890652
@@ -174,14 +175,15 @@ class GrowthFactorWADTLin(GrowthFactorBase):
 
     def fit_growth(self, tc):
         # Process week vs. weekly averaged ADT.
-        wadt = self.get_wadt_py(tc)
-        fit_results = self.linear_rate_fit(wadt['Week'].values,
-                                           wadt['WADT'].values)
+        wadt_py = self.get_wadt_py(tc)
+        fit_results = self.linear_rate_fit(wadt_py['Time'].values,
+                                           wadt_py['WADT'].values)
 
         # Convert linear weekly fit to yearly exponential fit (iffy logic).
-        aadt_info = tc.data['AADT'].reset_index()
+        # AADTs can only be calculated for perm_years, so consistent with
+        # `get_wadt_py`.
         growth_factor = 1. + (fit_results.params[1] * 52. /
-                              aadt_info['AADT'].values[0])
+                              tc.adts['AADT']['AADT'].values[0])
 
         return {'fit_type': 'Linear',
                 'fit_results': fit_results,
@@ -199,6 +201,6 @@ class GrowthFactorComposite(GrowthFactorBase):
         self.wadt_lin = GrowthFactorWADTLin()
 
     def fit_growth(self, tc):
-        if tc.data['AADT'].shape[0] > 1:
+        if tc.adts['AADT'].shape[0] > 1:
             return self.aadt_exp.fit_growth(tc)
         return self.wadt_lin.fit_growth(tc)

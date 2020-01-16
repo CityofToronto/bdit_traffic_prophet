@@ -84,7 +84,7 @@ class DerivedValsBase(metaclass=DVRegistrar):
         return madt
 
     @staticmethod
-    def get_aadt_from_madt(madt, perm_years):
+    def get_aadt_py_from_madt(madt, perm_years):
         # Weighted average for AADT.
         madt_py = madt.loc[perm_years, :]
         monthly_total_traffic = madt_py['MADT'] * madt_py['Days in Month']
@@ -93,11 +93,13 @@ class DerivedValsBase(metaclass=DVRegistrar):
                       madt_py.groupby('Year')['Days in Month'].sum())})
 
     @staticmethod
-    def get_ratios(dca, madt, aadt, perm_years):
-        dc_dom = dca.groupby(['Year', 'Month', 'Day of Week'])
+    def get_ratios_py(dca, madt, aadt, perm_years):
+        dca_py = dca.loc[perm_years].copy()
+        dc_dom = dca_py.groupby(['Year', 'Month', 'Day of Week'])
+        # Multi-index levels retain all values from dca even after using loc,
+        # so can only use `perm_years`.
         ymd_index = pd.MultiIndex.from_product(
-            [dca.index.levels[0], np.arange(1, 13, dtype=int)],
-            names=['Year', 'Month'])
+            [perm_years, np.arange(1, 13, dtype=int)], names=['Year', 'Month'])
 
         domadt = pd.DataFrame(
             dc_dom['Daily Count'].mean().unstack(level=-1, fill_value=np.nan),
@@ -109,10 +111,10 @@ class DerivedValsBase(metaclass=DVRegistrar):
         # Determine day-to-month conversion factor DoM_ijd.  (Uses a numpy
         # broadcasting trick.)
         dom_ijd = (madt['MADT'].loc[perm_years, :].values[:, np.newaxis] /
-                   domadt.loc[perm_years, :])
+                   domadt)
         # Determine day-to-year conversion factor D_ijd.
         d_ijd = (aadt['AADT'].values[:, np.newaxis] /
-                 domadt.loc[perm_years, :].unstack(level=-1)).stack()
+                 domadt.unstack(level=-1)).stack()
 
         return dom_ijd, d_ijd, n_avail_days
 
@@ -128,13 +130,12 @@ class DerivedValsStandard(DerivedValsBase):
         self._impute_ratios = impute_ratios
 
     def get_derived_vals(self, ptc):
-        dca = self.preprocess_daily_counts(ptc.data['Daily Count'])
+        dca = self.preprocess_daily_counts(ptc.data)
         madt = self.get_madt(dca)
-        aadt = self.get_aadt_from_madt(madt, ptc.perm_years)
-        dom_ijd, d_ijd, n_avail_days = self.get_ratios(
+        aadt = self.get_aadt_py_from_madt(madt, ptc.perm_years)
+        dom_ijd, d_ijd, n_avail_days = self.get_ratios_py(
             dca, madt, aadt, ptc.perm_years)
 
-        ptc.data['MADT'] = madt
-        ptc.data['AADT'] = aadt
+        ptc.adts = {'MADT': madt, 'AADT': aadt}
         ptc.ratios = {'DoM_ijd': dom_ijd, 'D_ijd': d_ijd,
                       'N_avail_days': n_avail_days}

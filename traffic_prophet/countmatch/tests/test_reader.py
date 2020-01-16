@@ -21,7 +21,7 @@ def counts(rdr):
 class TestRawAnnualCount:
     """Test preprocessing routines in RawAnnualCount."""
 
-    def test_from_raw_data(self, rdr, mister_x):
+    def test_from_raw_data(self, rdr):
         zr = rdr.get_zipreader(SAMPLE_ZIP['2010'])
         data = rdr.preprocess_count_data(list(zr)[7])
 

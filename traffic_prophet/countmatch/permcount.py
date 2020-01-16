@@ -24,20 +24,17 @@ class PermCount(base.Count):
         Raw daily traffic counts.
     perm_years : list
         List of years to use as permanent count.
-    dv_processor : DerivedVal instance
-        For imputation and derived properties.
-    growth_factor : GrowthFactor instance
-        For estimating growth factor.
-    process: bool
-        Process PTC for derived properties and growth rate.  Default: `True`.
     """
 
     def __init__(self, count_id, centreline_id, direction, data,
                  perm_years):
-        data = {'Daily Count': data}
         super().__init__(count_id, centreline_id, direction, data,
                          is_permanent=True)
-        self.perm_years = perm_years
+        self._perm_years = perm_years
+
+    @property
+    def perm_years(self):
+        return self._perm_years
 
     @classmethod
     def from_count_object(cls, tc, perm_years):
@@ -51,6 +48,15 @@ class PermCountProcessor:
     Currently a permanent count needs to have at least one year with all 12
     months and a sufficient number of total days represented, not be from HW401
     and not be excluded by the user in the config file.
+
+    Parameters
+    ----------
+    dv_calc : DerivedVal instance
+        For imputation and derived properties.
+    gf_calc : GrowthFactor instance
+        For estimating growth factor.
+    cfg : dict, optional
+        Configuration settings.  Default: `config.cm`.
     """
 
     def __init__(self, dv_calc, gf_calc, cfg=cfg.cm):
@@ -100,8 +106,8 @@ class PermCountProcessor:
             raise ValueError("no count file has sufficient data to use in "
                              "the model!  Check configuration settings.")
         elif not len(tcs.ptcs):
-            warnings.warn(
-                "no permanent counts read!  Check configuration settings.")
+            warnings.warn("no permanent counts read!  "
+                          "Check configuration settings.")
         elif not len(tcs.sttcs):
             warnings.warn("file only contains permanent counts!")
 
