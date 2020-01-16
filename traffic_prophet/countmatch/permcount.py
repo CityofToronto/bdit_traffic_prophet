@@ -30,11 +30,20 @@ class PermCount(base.Count):
                  perm_years):
         super().__init__(count_id, centreline_id, direction, data,
                          is_permanent=True)
+        if len(perm_years) == 0:
+            raise ValueError("cannot have empty perm_years!")
         self._perm_years = perm_years
+        self._growth_fit = None
 
     @property
     def perm_years(self):
         return self._perm_years
+
+    @property
+    def growth_factor(self):
+        if self._growth_fit is None:
+            raise AttributeError("PTC has not had its growth factor fit!")
+        return self._growth_fit['growth_factor']
 
     @classmethod
     def from_count_object(cls, tc, perm_years):

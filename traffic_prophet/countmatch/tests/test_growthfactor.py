@@ -91,15 +91,19 @@ class TestGrowthFactorAADTExp:
             x, y, {"year": x[0], "aadt": y[0]})
         assert np.abs(result.params[0] - slp) < 0.01
 
-    def test_fit_growth(self, ptc_multiyear):
+    def test_fit_growth(self, sample_counts, cfgcm_test):
+        ptc_multiyear = get_single_ptc(sample_counts, cfgcm_test, -104870)
+
         aadt = self.gfc.get_aadt(ptc_multiyear)
         fit_ref = sm.OLS(np.log(aadt['AADT'].values / aadt['AADT'].values[0]),
                          aadt['Year'].values - aadt['Year'].values[0]).fit()
 
-        fit_results = self.gfc.fit_growth(ptc_multiyear)
+        self.gfc.fit_growth(ptc_multiyear)
 
-        assert np.isclose(fit_results["growth_factor"],
+        assert np.isclose(ptc_multiyear._growth_fit["growth_factor"],
                           np.exp(fit_ref.params[0]))
+        assert (ptc_multiyear.growth_factor == 
+                ptc_multiyear._growth_fit["growth_factor"])
 
 
 class TestGrowthFactorWADTLin:
@@ -117,7 +121,10 @@ class TestGrowthFactorWADTLin:
         result = self.gfc.linear_rate_fit(x, y)
         assert np.abs(result.params[1] - slp) < 0.01
 
-    def test_fit_growth(self, ptc_oneyear, ptc_multiyear):
+    def test_fit_growth(self, sample_counts, cfgcm_test):
+        ptc_oneyear = get_single_ptc(sample_counts, cfgcm_test, -890)
+        ptc_multiyear = get_single_ptc(sample_counts, cfgcm_test, -104870)
+
         # The multi-year fit is REALLY sketchy, since we end up normalizing
         # by the first year's AADT.
         for ptc in (ptc_oneyear, ptc_multiyear):
@@ -125,19 +132,26 @@ class TestGrowthFactorWADTLin:
             fit_ref = sm.OLS(wadt['WADT'].values,
                              sm.add_constant(wadt['Time'].values)).fit()
 
-            fit_results = self.gfc.fit_growth(ptc)
+            self.gfc.fit_growth(ptc)
 
-            assert np.isclose(fit_results["growth_factor"],
+            assert np.isclose(ptc._growth_fit["growth_factor"],
                               1. + (fit_ref.params[1] * 52. /
                                     ptc.adts['AADT']['AADT'].values[0]))
+            assert (ptc.growth_factor ==
+                    ptc._growth_fit["growth_factor"])
 
 
 class TestGrowthFactorComposite:
 
-    def test_growthfactorcomposite(self, ptc_oneyear, ptc_multiyear):
+    def test_growthfactorcomposite(self, sample_counts, cfgcm_test):
+        ptc_oneyear = get_single_ptc(sample_counts, cfgcm_test, -890)
+        ptc_multiyear = get_single_ptc(sample_counts, cfgcm_test, -104870)
         gfc = gf.GrowthFactorComposite()
-        assert gfc.fit_growth(ptc_oneyear)['fit_type'] == 'Linear'
-        assert gfc.fit_growth(ptc_multiyear)['fit_type'] == 'Exponential'
+
+        gfc.fit_growth(ptc_oneyear)
+        gfc.fit_growth(ptc_multiyear)
+        assert ptc_oneyear._growth_fit['fit_type'] == 'Linear'
+        assert ptc_multiyear._growth_fit['fit_type'] == 'Exponential'
 
 
 class TestGrowthFactor:

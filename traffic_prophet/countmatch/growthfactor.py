@@ -132,9 +132,9 @@ class GrowthFactorAADTExp(GrowthFactorBase):
             {'year': aadt.at[0, 'Year'], 'aadt': aadt.at[0, 'AADT']})
         growth_factor = np.exp(fit_results.params[0])
 
-        return {'fit_type': 'Exponential',
-                'fit_results': fit_results,
-                'growth_factor': growth_factor}
+        tc._growth_fit = {'fit_type': 'Exponential',
+                          'fit_results': fit_results,
+                          'growth_factor': growth_factor}
 
 
 class GrowthFactorWADTLin(GrowthFactorBase):
@@ -185,9 +185,9 @@ class GrowthFactorWADTLin(GrowthFactorBase):
         growth_factor = 1. + (fit_results.params[1] * 52. /
                               tc.adts['AADT']['AADT'].values[0])
 
-        return {'fit_type': 'Linear',
-                'fit_results': fit_results,
-                'growth_factor': growth_factor}
+        tc._growth_fit = {'fit_type': 'Linear',
+                          'fit_results': fit_results,
+                          'growth_factor': growth_factor}
 
 
 class GrowthFactorComposite(GrowthFactorBase):
@@ -202,5 +202,6 @@ class GrowthFactorComposite(GrowthFactorBase):
 
     def fit_growth(self, tc):
         if tc.adts['AADT'].shape[0] > 1:
-            return self.aadt_exp.fit_growth(tc)
-        return self.wadt_lin.fit_growth(tc)
+            self.aadt_exp.fit_growth(tc)
+        else:
+            self.wadt_lin.fit_growth(tc)

@@ -22,7 +22,7 @@ def cfgcm_test():
         'min_counts_in_day': 24,
         'min_permanent_months': 12,
         'min_permanent_days': 274,
-        'exclude_ptc_neg': [],
+        'exclude_ptc_neg': [446378, ],
         'exclude_ptc_pos': [],
         'derived_vals_calculator': 'Standard',
         'derived_vals_settings': {},

@@ -132,7 +132,7 @@ class TestDerivedValsStandard:
             assert 'N_avail_days' in ptc.ratios.keys()
 
     def test_imputer(self, sample_counts, cfgcm_test):
-        ptc_multiyear = get_single_ptc(sample_counts, cfgcm_test, -104870)
+        pass
 
 
 class TestDerivedVals:
