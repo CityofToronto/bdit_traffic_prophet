@@ -1,6 +1,6 @@
 """CountMatch test suite preprocessing.
 
-Fixtures used by multiple files in this and subdirectories must be placed here.
+Fixtures used by multiple files in this and subdirectories are placed here.
 See https://docs.pytest.org/en/latest/fixture.html#conftest-py-sharing-fixture-functions
 for more.
 

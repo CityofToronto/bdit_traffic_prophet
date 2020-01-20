@@ -19,7 +19,7 @@ class DVRegistrar(type):
 
     def __init__(cls, name, bases, dct):
 
-        # Register GrowthFactorBase subclass if `_dv_type` not already taken.
+        # Register DerivedVal subclass if `_dv_type` not already taken.
         if name not in ('DerivedValsBase', 'DerivedVals'):
             if not hasattr(cls, "_dv_type"):
                 raise ValueError("must define a `_dv_type`.")
@@ -57,6 +57,19 @@ class DerivedValsBase(metaclass=DVRegistrar):
 
     @staticmethod
     def preprocess_daily_counts(dc):
+        """Preprocess daily counts by adding month and day of week.
+
+        Parameters
+        ---------------
+        dc : pandas.DataFrame
+            Daily counts.
+
+        Returns
+        -------
+        dca : pandas.DataFrame
+            Copy of `dc` with 'Month' and 'Day of Week' columns.
+
+        """
         # Ensure dc remains unchanged by the method.
         dca = dc.copy()
         dca['Month'] = dca['Date'].dt.month
@@ -64,6 +77,20 @@ class DerivedValsBase(metaclass=DVRegistrar):
         return dca
 
     def get_madt(self, dca):
+        """Get mean average daily traffic (MADT) from processed daily counts.
+
+        Parameters
+        ---------------
+        dca : pandas.DataFrame
+            Daily counts, with 'Month' and 'Day of Week' columns from
+            `preprocess_daily_counts`.
+
+        Returns
+        -------
+        madt : pandas.DataFrame
+            MADT table, with 'Days Available' and 'Days in Month' columns.
+
+        """
         dc_m = dca.groupby(['Year', 'Month'])
         madt = pd.DataFrame({
             'MADT': dc_m['Daily Count'].mean(),
@@ -73,9 +100,10 @@ class DerivedValsBase(metaclass=DVRegistrar):
                 names=['Year', 'Month'])
         )
 
-        # Loop to record number of days in month.
+        # Loop to record the number of days in each month. February requires
+        # recalculating in case of leap years.
         days_in_month = []
-        for year in dca.index.levels[0]:
+        for year in madt.index.levels[0]:
             cdays = self._months_of_year.copy()
             cdays[1] = pd.to_datetime('{0:d}-02-01'.format(year)).daysinmonth
             days_in_month += cdays
@@ -85,7 +113,22 @@ class DerivedValsBase(metaclass=DVRegistrar):
 
     @staticmethod
     def get_aadt_py_from_madt(madt, perm_years):
-        # Weighted average for AADT.
+        """Annual average daily traffic (AADT) from an MADT weighted average.
+
+        Parameters
+        ---------------
+        madt : pandas.DataFrame
+            MADT, with 'Days in Month' column as from `get_madt`.
+        perm_years : list
+            List of permanent count years for location; obtained from
+             PermCount.perm_years.
+
+        Returns
+        -------
+        aadt : pandas.DataFrame
+            AADT table.
+
+        """
         madt_py = madt.loc[perm_years, :]
         monthly_total_traffic = madt_py['MADT'] * madt_py['Days in Month']
         return pd.DataFrame(
@@ -93,9 +136,33 @@ class DerivedValsBase(metaclass=DVRegistrar):
                       madt_py.groupby('Year')['Days in Month'].sum())})
 
     @staticmethod
-    def get_ratios_py(dca, madt, aadt, perm_years):
-        dca_py = dca.loc[perm_years].copy()
-        dc_dom = dca_py.groupby(['Year', 'Month', 'Day of Week'])
+    def get_ratios_py(dca, madt, aadt_py, perm_years):
+        """Ratios between MADT and AADT and day-of-month average daily traffic.
+
+        Parameters
+        ---------------
+        dca : pandas.DataFrame
+            Daily counts, with 'Month' and 'Day of Week' columns from
+            `preprocess_daily_counts`.
+        madt : pandas.DataFrame
+            MADT, with 'Days in Month' column as from `get_madt`.
+        aadt_py : pandas.DataFrame
+            AADT for permanent years, as from `get_aadt_py_from_madt`.
+        perm_years : list
+            List of permanent count years for location; obtained from
+            PermCount.perm_years.
+
+        Returns
+        -------
+        dom_ijd : pandas.DataFrame
+            Ratio between MADT and day-of-month ADT.
+        d_ijd : pandas.DataFrame
+            Ratio between AADT and day-of-month ADT.
+        n_avail_days : pandas.DataFrame
+            Number of days used to calculate day-of-month ADT.
+
+        """
+        dc_dom = dca.loc[perm_years].groupby(['Year', 'Month', 'Day of Week'])
         # Multi-index levels retain all values from dca even after using loc,
         # so can only use `perm_years`.
         ymd_index = pd.MultiIndex.from_product(
@@ -112,8 +179,9 @@ class DerivedValsBase(metaclass=DVRegistrar):
         # broadcasting trick.)
         dom_ijd = (madt['MADT'].loc[perm_years, :].values[:, np.newaxis] /
                    domadt)
-        # Determine day-to-year conversion factor D_ijd.
-        d_ijd = (aadt['AADT'].values[:, np.newaxis] /
+        # Determine day-to-year conversion factor D_ijd.  (Uses broadcasting
+        # and pivoting pandas columns.)
+        d_ijd = (aadt_py['AADT'].values[:, np.newaxis] /
                  domadt.unstack(level=-1)).stack()
 
         return dom_ijd, d_ijd, n_avail_days
@@ -130,6 +198,16 @@ class DerivedValsStandard(DerivedValsBase):
         self._impute_ratios = impute_ratios
 
     def get_derived_vals(self, ptc):
+        """Get derived values, including ADTs and ratios between them.
+
+        Depending on settings, will also impute missing values.
+
+        Parameters
+        ----------
+        ptc : permcount.PermCount
+            Permanent count instance.
+
+        """
         dca = self.preprocess_daily_counts(ptc.data)
         madt = self.get_madt(dca)
         aadt = self.get_aadt_py_from_madt(madt, ptc.perm_years)
@@ -139,3 +217,9 @@ class DerivedValsStandard(DerivedValsBase):
         ptc.adts = {'MADT': madt, 'AADT': aadt}
         ptc.ratios = {'DoM_ijd': dom_ijd, 'D_ijd': d_ijd,
                       'N_avail_days': n_avail_days}
+
+        if self._impute_ratios:
+            self.impute_ratios(ptc)
+
+    def impute_ratios(self, ptc):
+        raise NotImplementedError

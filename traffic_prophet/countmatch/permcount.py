@@ -37,10 +37,12 @@ class PermCount(base.Count):
 
     @property
     def perm_years(self):
+        """List of years where the count is permanent."""
         return self._perm_years
 
     @property
     def growth_factor(self):
+        """Multiplicative year-on-year growth factor."""
         if self._growth_fit is None:
             raise AttributeError("PTC has not had its growth factor fit!")
         return self._growth_fit['growth_factor']
@@ -63,7 +65,7 @@ class PermCountProcessor:
     dv_calc : DerivedVal instance
         For imputation and derived properties.
     gf_calc : GrowthFactor instance
-        For estimating growth factor.
+        For estimating the growth factor.
     cfg : dict, optional
         Configuration settings.  Default: `config.cm`.
     """
@@ -72,8 +74,7 @@ class PermCountProcessor:
         self.dvc = dv_calc
         self.gfc = gf_calc
         self.cfg = cfg
-        # Obtain a list of count_ids that (according to TEPs-I) should not be
-        # PTCs because they reduce the accuracy of CountMatch.
+        # Obtain a list of count_ids that should be excluded from being PTCs.
         self.excluded_ids = (self.cfg['exclude_ptc_pos'] +
                              [-id for id in self.cfg['exclude_ptc_neg']])
         self._disable_tqdm = not self.cfg['verbose']

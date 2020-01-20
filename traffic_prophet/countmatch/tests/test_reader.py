@@ -120,8 +120,8 @@ class TestReaderZip:
 
     def test_preprocess_count_data(self, rdr, counts):
         ref = counts[7]
-        rd = ref.copy()
         # Do a deep copy because preprocess_count_data alters its arguments.
+        rd = ref.copy()
         rd['data'] = rd['data'].copy()
 
         rd = rdr.preprocess_count_data(rd)

@@ -26,6 +26,10 @@ class TestPermCount:
         assert ptc.is_permanent
         assert ptc.perm_years == [2010, 2012]
 
+        with pytest.raises(AttributeError) as excinfo:
+            ptc.growth_factor
+        assert "PTC has not had its growth factor fit!" in str(excinfo.value)
+
         with pytest.raises(ValueError) as excinfo:
             ptc = pc.PermCount.from_count_object(
                 sample_counts.counts[-104870], [])
@@ -37,7 +41,7 @@ class TestPermCountProcessor:
     def test_setup(self, pcproc):
         assert isinstance(pcproc.dvc, dv.DerivedValsStandard)
         assert isinstance(pcproc.gfc, gf.GrowthFactorComposite)
-        # We passed a custom cfgcm with no excluded IDs.
+        # We passed a custom cfgcm with one excluded ID.
         assert pcproc.excluded_ids == [-446378, ]
 
     def test_partition(self, pcproc, sample_counts):

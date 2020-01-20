@@ -8,28 +8,55 @@ from .. import derivedvals as dv
 from .. import growthfactor as gf
 
 
-def get_single_ptc(sample_counts, cfgcm_test, count_id):
-    pcpp = pc.PermCountProcessor(None, None, cfg=cfgcm_test)
-    perm_years = pcpp.partition_years(sample_counts.counts[count_id])
-    ptc = pc.PermCount.from_count_object(sample_counts.counts[count_id],
+def get_single_ptc(counts, cfgcm, count_id):
+    pcpp = pc.PermCountProcessor(None, None, cfg=cfgcm)
+    perm_years = pcpp.partition_years(counts.counts[count_id])
+    ptc = pc.PermCount.from_count_object(counts.counts[count_id],
                                          perm_years)
     dvs = dv.DerivedVals('Standard')
     dvs.get_derived_vals(ptc)
     return ptc
 
 
-@pytest.fixture(scope='module')
-def ptc_oneyear(sample_counts, cfgcm_test):
-    return get_single_ptc(sample_counts, cfgcm_test, -890)
+class TestGFRegistrarGrowthFactor:
+    """Tests GFRegistrar and GrowthFactor."""
 
+    def test_gfregistrar(self):
 
-@pytest.fixture(scope='module')
-def ptc_multiyear(sample_counts, cfgcm_test):
-    return get_single_ptc(sample_counts, cfgcm_test, -104870)
+        # Test successful initialization of GrowthFactor subclass.
+        class GrowthFactorCompositeTest(gf.GrowthFactorComposite):
+            _fit_type = 'Testing'
+
+        assert gf.GF_REGISTRY['Testing'] is GrowthFactorCompositeTest
+        gf_instance = gf.GrowthFactor('Testing')
+        assert gf_instance._fit_type == 'Testing'
+
+        # Pop the dummy class, in case we test twice.
+        gf.GFRegistrar._registry.pop('Testing', None)
+
+        # Test repeated `_dv_type` error handling.
+        with pytest.raises(ValueError) as excinfo:
+            class GrowthFactorCompositeBad1(gf.GrowthFactorComposite):
+                pass
+        assert "already registered in" in str(excinfo.value)
+
+        # Test missing `_dv_type` error handling.
+        with pytest.raises(ValueError) as excinfo:
+            class GrowthFactorCompositeBad2(gf.GrowthFactorBase):
+                pass
+        assert "must define a" in str(excinfo.value)
 
 
 class TestGrowthFactorBase:
     """Test growth factor base class."""
+
+    @pytest.fixture()
+    def ptc_oneyear(self, sample_counts, cfgcm_test):
+        return get_single_ptc(sample_counts, cfgcm_test, -890)
+
+    @pytest.fixture()
+    def ptc_multiyear(self, sample_counts, cfgcm_test):
+        return get_single_ptc(sample_counts, cfgcm_test, -104870)
 
     def setup(self):
         self.gfb = gf.GrowthFactorBase()
@@ -45,7 +72,7 @@ class TestGrowthFactorBase:
                                   aadt['AADT'].values)
 
     def test_get_wadt_py(self, ptc_oneyear, ptc_multiyear):
-        # For single year PTC, confirm WADT values for individual weeks.
+        # Confirm WADT values for individual weeks.
         wadt_oy = self.gfb.get_wadt_py(ptc_oneyear)
         wadt_jun14 = (ptc_oneyear.data
                       .loc[(2010, 165):(2010, 171), 'Daily Count'].mean())
@@ -56,7 +83,6 @@ class TestGrowthFactorBase:
         assert np.isclose(
             wadt_oy.loc[wadt_oy['Week'] == 48, 'WADT'].values[0], wadt_nov29)
 
-        # For multiyear PTC, confirm we can reproduce data frame.
         wadt_my = self.gfb.get_wadt_py(ptc_multiyear)
 
         wadt_apr26_2010 = (ptc_multiyear.data
