@@ -5,22 +5,12 @@ import pandas as pd
 import zipfile
 import glob
 
+from . import base
 from .. import cfg
 from .. import conn
 
 
-class Count:
-
-    def __init__(self, count_id, centreline_id, direction,
-                 data, is_permanent=False):
-        self.count_id = count_id
-        self.centreline_id = int(centreline_id)
-        self.direction = int(direction)
-        self.is_permanent = bool(is_permanent)
-        self.data = data
-
-
-class RawAnnualCount(Count):
+class RawAnnualCount(base.Count):
     """Storage for raw daily traffic for one year."""
 
     def __init__(self, count_id, centreline_id, direction, year,
@@ -47,11 +37,11 @@ class RawAnnualCount(Count):
 
 class ReaderBase:
 
-    def __init__(self, source, cfgcm=cfg.cm):
+    def __init__(self, source, cfg=cfg.cm):
         # Store permanent and temporary stations.
         self.counts = None
         self.source = source
-        self.cfg = cfgcm
+        self.cfg = cfg
 
     def read(self):
         """Read source data into a dictionary of counts."""
@@ -68,7 +58,7 @@ class ReaderBase:
 
     def has_enough_data(self, data):
         """Checks if there is enough data to be a usable count."""
-        return data.shape[0] >= self.cfg['min_stn_count']
+        return data.shape[0] >= self.cfg['min_count']
 
     @staticmethod
     def reset_daily_count_index(daily_count):
@@ -99,22 +89,22 @@ class ReaderBase:
                     [[item.year, ], _ctable.index],
                     names=['Year', _ctable.index.name])
             unified_data = pd.concat([c.data for c in counts[cid]])
-            counts[cid] = Count(counts[cid][0].count_id,
-                                counts[cid][0].centreline_id,
-                                counts[cid][0].direction,
-                                unified_data, is_permanent=False)
+            counts[cid] = base.Count(counts[cid][0].count_id,
+                                     counts[cid][0].centreline_id,
+                                     counts[cid][0].direction,
+                                     unified_data, is_permanent=False)
 
 
 class ReaderZip(ReaderBase):
 
-    def __init__(self, source, cfgcm=cfg.cm):
+    def __init__(self, source, cfg=cfg.cm):
         if type(source) == str:
             source = glob.glob(source)
         elif type(source) == dict:
             source = [source[k] for k in sorted(source.keys())]
         source = sorted(source)
 
-        super().__init__(source, cfgcm=cfgcm)
+        super().__init__(source, cfg=cfg)
 
     def read_source(self, counts):
         """Read zip file contents into RawAnnualCount objects."""
@@ -242,7 +232,7 @@ class ReaderPostgres(ReaderBase):
 
     def preprocess_count_data(self, rd):
         """Minor preprocessing of raw count data."""
-        # Not idempotent.
+        # `reset_daily_count_index` alters rd.
         self.reset_daily_count_index(rd['data'])
         return rd
 
@@ -274,9 +264,10 @@ class ReaderPostgres(ReaderBase):
                        'year': year}
 
 
-def read(source):
-    rdr = (ReaderPostgres(source) if isinstance(source, conn.Connection)
-           else ReaderZip(source))
+def read(source, cfg=cfg.cm):
+    rdr = (ReaderPostgres(source, cfg=cfg)
+           if isinstance(source, conn.Connection)
+           else ReaderZip(source, cfg=cfg))
     rdr.read()
 
     return rdr
