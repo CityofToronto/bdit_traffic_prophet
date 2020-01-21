@@ -1,4 +1,5 @@
 import pytest
+import hypothesis as hyp
 import numpy as np
 import pandas as pd
 
@@ -141,6 +142,7 @@ class TestDerivedValsStandard:
 
     def setup(self):
         self.dvc = dv.DerivedValsStandard()
+        self.imparray = np.arange(132, dtype=float).reshape(12, 11)
 
     @pytest.mark.parametrize('count_id', [-890, -104870])
     def test_get_derived_vals(self, sample_counts, cfgcm_test, count_id):
@@ -151,8 +153,52 @@ class TestDerivedValsStandard:
         assert sorted(list(ptc.ratios.keys())) == [
             'D_ijd', 'DoM_ijd', 'N_avail_days']
 
+    @hyp.given(n_nan=hyp.strategies.integers(min_value=5, max_value=10))
+    @hyp.settings(max_examples=30)
+    def test_fill_nans(self, n_nan):
+        # Flatten ravels and makes a copy.
+        imparray_nans = self.imparray.flatten()
+        # Randomly set some values to NaN.
+        nan_indices = np.random.choice(
+            np.arange(imparray_nans.shape[0], dtype=int),
+            n_nan, replace=False)
+        imparray_nans[nan_indices] = np.nan
+        assert np.sum(np.isnan(imparray_nans)) == n_nan
+
+        # Test `fill_nans`.
+        impdf_nans = pd.DataFrame(
+            imparray_nans.reshape(self.imparray.shape))
+        assert not np.array_equal(impdf_nans.values, self.imparray)
+        self.dvc.fill_nans(impdf_nans, self.imparray)
+        assert np.array_equal(impdf_nans.values, self.imparray)
+
     def test_imputer(self, sample_counts, cfgcm_test):
-        pass
+        ptc = get_single_ptc(sample_counts, cfgcm_test, -104870)
+        ptc_imp = get_single_ptc(sample_counts, cfgcm_test, -104870)
+
+        dvc_imp = dv.DerivedVals('Standard', impute_ratios=True, max_iter=10)
+
+        self.dvc.get_derived_vals(ptc)
+        dvc_imp.get_derived_vals(ptc_imp)
+
+        # Check that NaNs have been filled.
+        assert np.isnan(ptc.ratios['DoM_ijd'].at[(2010, 5), 4])
+        assert np.isnan(ptc.ratios['D_ijd'].at[(2010, 5), 4])
+        assert not np.isnan(ptc_imp.ratios['DoM_ijd'].at[(2010, 5), 4])
+        assert not np.isnan(ptc_imp.ratios['D_ijd'].at[(2010, 5), 4])
+
+        # Check that non-NaN values are untouched.
+        notnulls = ~np.isnan(ptc.ratios['DoM_ijd'].values)
+        tols = {'rtol': 1e-10}
+        assert np.allclose(ptc.ratios['DoM_ijd'].values[notnulls],
+                           ptc_imp.ratios['DoM_ijd'].values[notnulls], **tols)
+        assert np.allclose(ptc.ratios['D_ijd'].values[notnulls],
+                           ptc_imp.ratios['D_ijd'].values[notnulls], **tols)
+
+        # Check nothing else is different.
+        assert ptc.adts['MADT'].equals(ptc_imp.adts['MADT'])
+        assert ptc.adts['AADT'].equals(ptc_imp.adts['AADT'])
+        assert ptc.data.equals(ptc_imp.data)
 
 
 class TestDerivedVals:
