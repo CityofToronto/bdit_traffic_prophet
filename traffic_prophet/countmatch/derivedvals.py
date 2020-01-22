@@ -2,6 +2,9 @@
 
 import numpy as np
 import pandas as pd
+# TO DO: remove this once the imputer is no longer experimental.
+from sklearn.experimental import enable_iterative_imputer
+from sklearn import impute as skimp
 
 
 DV_REGISTRY = {}
@@ -194,8 +197,9 @@ class DerivedValsStandard(DerivedValsBase):
 
     _dv_type = 'Standard'
 
-    def __init__(self, impute_ratios=False):
+    def __init__(self, impute_ratios=False, **kwargs):
         self._impute_ratios = impute_ratios
+        self._imputer_args = kwargs
 
     def get_derived_vals(self, ptc):
         """Get derived values, including ADTs and ratios between them.
@@ -221,5 +225,26 @@ class DerivedValsStandard(DerivedValsBase):
         if self._impute_ratios:
             self.impute_ratios(ptc)
 
+    @staticmethod
+    def fill_nans(df, imp):
+        """Fill NaN values in an array with imputed ones.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            Original data, with NaNs.
+        imp : numpy.ndarray
+            Data array of imputed values.
+
+        """
+        for i, j in zip(*np.where(df.isnull())):
+            df.iloc[i, j] = imp[i, j]
+
     def impute_ratios(self, ptc):
-        raise NotImplementedError
+        imp = skimp.IterativeImputer(**self._imputer_args)
+
+        dom_ijd_imputed = imp.fit_transform(ptc.ratios['DoM_ijd'])
+        d_ijd_imputed = imp.fit_transform(ptc.ratios['D_ijd'])
+
+        self.fill_nans(ptc.ratios['DoM_ijd'], dom_ijd_imputed)
+        self.fill_nans(ptc.ratios['D_ijd'], d_ijd_imputed)
