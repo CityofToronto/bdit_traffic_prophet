@@ -2,6 +2,7 @@
 
 import numpy as np
 import pandas as pd
+# TO DO: remove this once the imputer is no longer experimental.
 from sklearn.experimental import enable_iterative_imputer
 from sklearn import impute as skimp
 
@@ -233,7 +234,7 @@ class DerivedValsStandard(DerivedValsBase):
         df : pandas.DataFrame
             Original data, with NaNs.
         imp : numpy.ndarray
-            Data array with imputed values.
+            Data array of imputed values.
 
         """
         for i, j in zip(*np.where(df.isnull())):

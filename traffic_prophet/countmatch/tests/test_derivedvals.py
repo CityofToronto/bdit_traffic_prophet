@@ -176,16 +176,24 @@ class TestDerivedValsStandard:
         ptc = get_single_ptc(sample_counts, cfgcm_test, -104870)
         ptc_imp = get_single_ptc(sample_counts, cfgcm_test, -104870)
 
-        dvc_imp = dv.DerivedVals('Standard', impute_ratios=True, max_iter=10)
+        dvc_imp = dv.DerivedVals('Standard', impute_ratios=True, max_iter=100)
+        # Check that we can set imputer args (that are off by default).
+        assert not self.dvc._impute_ratios
+        assert dvc_imp._impute_ratios
+        assert dvc_imp._imputer_args['max_iter'] == 100
 
         self.dvc.get_derived_vals(ptc)
         dvc_imp.get_derived_vals(ptc_imp)
 
-        # Check that NaNs have been filled.
+        # Check that a specific NaN has been filled.
         assert np.isnan(ptc.ratios['DoM_ijd'].at[(2010, 5), 4])
         assert np.isnan(ptc.ratios['D_ijd'].at[(2010, 5), 4])
         assert not np.isnan(ptc_imp.ratios['DoM_ijd'].at[(2010, 5), 4])
         assert not np.isnan(ptc_imp.ratios['D_ijd'].at[(2010, 5), 4])
+
+        # Check that all NaNs are filled.
+        assert not np.any(ptc_imp.ratios['DoM_ijd'].isnull())
+        assert not np.any(ptc_imp.ratios['D_ijd'].isnull())
 
         # Check that non-NaN values are untouched.
         notnulls = ~np.isnan(ptc.ratios['DoM_ijd'].values)
