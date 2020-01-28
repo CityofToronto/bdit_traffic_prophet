@@ -38,6 +38,16 @@ class Matcher:
             [self.tcs.ptcs[key].ratios['N_avail_days'].isnull().any(axis=None)
              for key in self.tcs.ptcs.keys()])
 
+    def get_sttc_date_columns(self):
+        """Append year, month and day of week columns to STTC data.
+
+        These values are used for matching with neighbouring PTC data.
+        """
+        for sttc in self.tcs.sttcs.values():
+            sttc.data['STTC Year'] = sttc.data['Date'].dt.year
+            sttc.data['Month'] = sttc.data['Date'].dt.month
+            sttc.data['Day of Week'] = sttc.data['Date'].dt.dayofweek
+
     def get_available_years(self, ptc):
         """Calculate a table of years where ratios are available for a given
         month and day of week.
@@ -171,11 +181,4 @@ class Matcher:
 
     def get_mse_table(self, sttc, ptc):
         """Get a table."""
-
-        # Get date information to match STTC data row with PTC.
-        sttc_data = sttc.data.copy()
-        sttc_data['Year'] = sttc_data['Date'].dt.year
-        sttc_data['Month'] = sttc_data['Date'].dt.month
-        sttc_data['Day of Week'] = sttc_data['Date'].dt.dayofweek
-
-        for 
+        pass
