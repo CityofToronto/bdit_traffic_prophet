@@ -411,9 +411,9 @@ class MatcherBase(metaclass=MatcherRegistrar):
         return sttc_aadt_ests, ptc_aadt_ests
 
 
-def MatcherStandard(MatcherBase):
+class MatcherStandard(MatcherBase):
 
-    _matcher_type = 'standard'
+    _matcher_type = 'Standard'
 
     def estimate_sttc_aadt(self, tc, want_year):
         """Estimate AADT of an STTC."""
@@ -444,9 +444,9 @@ def MatcherStandard(MatcherBase):
         return tc.count_id, aadt_est
 
 
-def MatcherBagheri(MatcherBase):
+class MatcherBagheri(MatcherBase):
 
-    _matcher_type = 'bagheri'
+    _matcher_type = 'Bagheri'
 
     def __init__(self, tcs, nb, err_measure='MSE', cfg=cfg.cm):
         assert err_measure in ('MSE', 'COV'), "unrecognized err_measure!"
