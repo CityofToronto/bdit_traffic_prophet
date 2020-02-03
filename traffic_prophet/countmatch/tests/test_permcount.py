@@ -72,3 +72,24 @@ class TestPermCountProcessor:
 
         for sttc in tcs.sttcs.values():
             assert isinstance(sttc, base.Count)
+
+
+class TestGetPTCsSTTCsFunction:
+
+    def test_reader(self, pcproc, cfgcm_test):
+        tcs_ref = reader.read(SAMPLE_ZIP, cfg=cfgcm_test)
+        pcproc.get_ptcs_sttcs(tcs_ref)
+
+        tcs = reader.read(SAMPLE_ZIP, cfg=cfgcm_test)
+        pc.get_ptcs_sttcs(tcs, cfg=cfgcm_test)
+
+        assert sorted(tcs.ptcs.keys()) == sorted(tcs_ref.ptcs.keys())
+        assert sorted(tcs.sttcs.keys()) == sorted(tcs_ref.sttcs.keys())
+
+        for key in tcs.ptcs.keys():
+            for val in ('AADT', 'MADT'):
+                assert tcs_ref.ptcs[key].adts[val].equals(
+                    tcs.ptcs[key].adts[val])
+            for val in ('D_ijd', 'DoM_ijd', 'N_avail_days'):
+                assert tcs_ref.ptcs[key].ratios[val].equals(
+                    tcs.ptcs[key].ratios[val])
