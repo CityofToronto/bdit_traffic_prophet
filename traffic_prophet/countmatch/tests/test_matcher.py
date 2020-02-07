@@ -83,3 +83,42 @@ class TestMatcherRegistrarMatcher:
         assert isinstance(matcher, mt.MatcherBagheri)
         with pytest.raises(KeyError):
             matcher = mt.Matcher('Testing')
+
+
+class TestMatcherBase:
+
+    @pytest.fixture
+    def tcs_base(self, cfgcm_test):
+        """Fixture for tests in Base that write to tcs.
+
+        This has test scope, so gets re-run each time we run a test.
+        """
+        return get_tcs(cfgcm_test)
+
+    def test_init(self, tcs_base, nb, cfgcm_test):
+        matcher = mt.MatcherBase(tcs_base, nb, cfg=cfgcm_test)
+        assert matcher.tcs is tcs_base
+        assert matcher.cfg is cfgcm_test
+        assert matcher.nb is nb
+        assert matcher._average_growth_rate is not None
+        assert matcher._disable_tqdm is not cfgcm_test['verbose']
+
+    def test_get_sttc_date_columns(self, tcs_base, nb, cfgcm_test):
+        # get_sttc_date_columns is run by __init__.
+        matcher_ = mt.MatcherBase(tcs_base, nb, cfg=cfgcm_test)
+
+        for sttc in tcs_base.sttcs.values():
+            assert set(['STTC Year', 'Month', 'Day of Week']).issubset(
+                set(sttc.data.columns))
+
+    def test_get_backup_ratios_for_nans(self, tcs_base, cfgcm_test):
+        # get_backup_ratios_for_nans is run by __init__.
+        matcher_ = mt.MatcherBase(tcs_base, nb, cfg=cfgcm_test)
+
+        for ptc in tcs_base.ptcs.values():
+            if ptc.ratios['N_avail_days'].isnull().any(axis=None):
+                assert set(['DoM_i', 'D_i']).issubset(
+                    set(ptc.ratios.keys()))
+            else:
+                assert 'DoM_i' not in ptc.ratios.keys()
+                assert 'D_i' not in ptc.ratios.keys()

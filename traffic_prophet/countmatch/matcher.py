@@ -73,26 +73,13 @@ class MatcherBase(metaclass=MatcherRegistrar):
         # Calculate needed STTC date columns.
         self.get_sttc_date_columns()
         # If ratio matrices have NaNs, prepare annually averaged versions of
-        # DoM_ijd and D_ijd.
-        if self.any_ptc_ratio_nulls():
-            for ptc in self.tcs.ptcs.values():
-                self.get_annually_averaged_ratios(ptc)
+        # DoM_ijd and D_ijd as backups.
+        self.get_backup_ratios_for_nans()
 
         if self.cfg['average_growth']:
             self._average_growth_rate = self.get_average_growth()
 
         self._disable_tqdm = not self.cfg['verbose']
-
-    def any_ptc_ratio_nulls(self):
-        """Check if there are any nulls in PTC ratio matrices."""
-        return np.any(
-            [self.tcs.ptcs[key].ratios['N_avail_days'].isnull().any(axis=None)
-             for key in self.tcs.ptcs.keys()])
-
-    def get_average_growth(self, multi_year=False):
-        """Citywide growth factor, averaged across all PTCs."""
-        return np.mean([v.growth_factor for v in self.tcs.ptcs.values()
-                        if v.adts['AADT'].shape[0] > (1 if multi_year else 0)])
 
     def get_sttc_date_columns(self):
         """Append year, month and day of week columns to STTC data.
@@ -106,32 +93,11 @@ class MatcherBase(metaclass=MatcherRegistrar):
             sttc.data['Month'] = sttc.data['Date'].dt.month
             sttc.data['Day of Week'] = sttc.data['Date'].dt.dayofweek
 
-    def get_available_years(self, ptc):
-        """Calculate a table of years where ratios are available.
-
-        Only calculated if there are NaNs in PTC derived values.
-
-        Parameters
-        ----------
-        ptc : permcount.PermCount
-            Permanent count.
-
-        Returns
-        -------
-        avail_years : pd.DataFrame
-            Data frame where rows are months, columns are day of week and
-            values are lists of available years for each month / day of week.
-
-        """
-        avail_years = []
-        month = []
-        for name, group in (ptc.ratios['N_avail_days']
-                            .notnull().groupby('Month')):
-            gd = group.reset_index(level='Month', drop=True)
-            avail_years.append([gd.loc[gd[c]].index.values
-                                for c in group.columns])
-            month.append(name)
-        return pd.DataFrame(avail_years, index=month)
+    def get_backup_ratios_for_nans(self):
+        """Get annually averaged ratios for counts with NaNs in ratios."""
+        for ptc in self.tcs.ptcs.values():
+            if ptc.ratios['N_avail_days'].isnull().any(axis=None):
+                self.get_annually_averaged_ratios(ptc)
 
     def get_annually_averaged_ratios(self, ptc):
         """Annually averaged versions of DoM_ijd and D_ijd.
@@ -161,6 +127,38 @@ class MatcherBase(metaclass=MatcherRegistrar):
         ptc.ratios['D_i'] = pd.DataFrame({'D_i': d_i}, index=idx)
 
         ptc.ratios['avail_years'] = self.get_available_years(ptc)
+
+    def get_available_years(self, ptc):
+        """Calculate a table of years where ratios are available.
+
+        Only calculated if there are NaNs in PTC derived values.
+
+        Parameters
+        ----------
+        ptc : permcount.PermCount
+            Permanent count.
+
+        Returns
+        -------
+        avail_years : pd.DataFrame
+            Data frame where rows are months, columns are day of week and
+            values are lists of available years for each month / day of week.
+
+        """
+        avail_years = []
+        month = []
+        for name, group in (ptc.ratios['N_avail_days']
+                            .notnull().groupby('Month')):
+            gd = group.reset_index(level='Month', drop=True)
+            avail_years.append([gd.loc[gd[c]].index.values
+                                for c in group.columns])
+            month.append(name)
+        return pd.DataFrame(avail_years, index=month)
+
+    def get_average_growth(self, multi_year=False):
+        """Citywide growth factor, averaged across all PTCs."""
+        return np.mean([v.growth_factor for v in self.tcs.ptcs.values()
+                        if v.adts['AADT'].shape[0] > (1 if multi_year else 0)])
 
     def get_neighbour_ptcs(self, tc):
         """Find neighbouring PTCs.
