@@ -126,34 +126,36 @@ class MatcherBase(metaclass=MatcherRegistrar):
         ptc.ratios['DoM_i'] = pd.DataFrame({'DoM_i': dom_i}, index=idx)
         ptc.ratios['D_i'] = pd.DataFrame({'D_i': d_i}, index=idx)
 
-        ptc.ratios['avail_years'] = self.get_available_years(ptc)
+        ptc.ratios['avail_years'] = self.get_available_years(
+            ptc.ratios['N_avail_days'])
 
-    def get_available_years(self, ptc):
-        """Calculate a table of years where ratios are available.
-
-        Only calculated if there are NaNs in PTC derived values.
+    @staticmethod
+    def get_available_years(df_N):
+        """Calculate a table of permanent years where ratios are available.
 
         Parameters
         ----------
-        ptc : permcount.PermCount
-            Permanent count.
+        df_N : pandas.DataFrame
+            DataFrame of the number of available days of each year, month and
+            day of week for permanent count years.
 
         Returns
         -------
         avail_years : pd.DataFrame
             Data frame where rows are months, columns are day of week and
-            values are lists of available years for each month / day of week.
+            values are lists of available permanent count years for each
+            month / day of week.
 
         """
-        avail_years = []
-        month = []
-        for name, group in (ptc.ratios['N_avail_days']
-                            .notnull().groupby('Month')):
-            gd = group.reset_index(level='Month', drop=True)
-            avail_years.append([gd.loc[gd[c]].index.values
-                                for c in group.columns])
-            month.append(name)
-        return pd.DataFrame(avail_years, index=month)
+        # First line turns df_N into index values and single column of
+        # number of available days.
+        return (df_N.unstack().unstack().reset_index()
+                .dropna()
+                .groupby(['Month', 'Day of Week'])['Year']
+                # pd.Series.unique returns unsorted.  Conversion to list
+                # because pandas cannot fill NaNs with arrays.
+                .apply(lambda x: sorted(list(x.unique())))
+                .unstack(fill_value=[]))
 
     def get_average_growth(self, multi_year=False):
         """Citywide growth factor, averaged across all PTCs."""
@@ -220,7 +222,7 @@ class MatcherBase(metaclass=MatcherRegistrar):
                 sttc_row['Month'], sttc_row['Day of Week']]
             # If no year has this month and day of week available, use the
             # annual average.
-            if not avail_years.shape[0]:
+            if not len(avail_years):
                 dom_ijd = ptc.ratios['DoM_i'].at[closest_year, 'DoM_i']
                 d_ijd = ptc.ratios['D_i'].at[closest_year, 'D_i']
 
@@ -229,8 +231,11 @@ class MatcherBase(metaclass=MatcherRegistrar):
             # Otherwise pick the closest year that is available, and
             # recalculate loc and dom_ijd
             else:
+                # avail_years is a list; can make this faster by
+                # get_avail_years to return arrays instead of non-zero-length
+                # lists, but that would lead to mixed data types.
                 closest_year = self.get_closest_year(sttc_row['STTC Year'],
-                                                     avail_years)
+                                                     np.array(avail_years))
                 loc = ((closest_year, sttc_row['Month']),
                        sttc_row['Day of Week'])
                 dom_ijd = ptc.ratios['DoM_ijd'].at[loc]

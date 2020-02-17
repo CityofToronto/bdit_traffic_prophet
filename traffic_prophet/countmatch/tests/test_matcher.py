@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import pytest
 import hypothesis as hyp
 import hypothesis.extra.numpy as hypnum
@@ -11,7 +12,7 @@ from .. import neighbour as nbr
 from ...data import SAMPLE_ZIP, SAMPLE_LONLAT
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope='module')
 def nb(cfgcm_test):
     nb = nbr.NeighbourLonLatEuclidean(SAMPLE_LONLAT, 2, [890, 104870])
     nb.find_neighbours()
@@ -24,7 +25,7 @@ def get_tcs(cfg):
     return tcs
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope='module')
 def tcs_ref(cfgcm_test):
     """Fixture for all tests that do not append to arguments."""
     return get_tcs(cfgcm_test)
@@ -111,14 +112,58 @@ class TestMatcherBase:
             assert set(['STTC Year', 'Month', 'Day of Week']).issubset(
                 set(sttc.data.columns))
 
-    def test_get_backup_ratios_for_nans(self, tcs_base, cfgcm_test):
+    def test_get_backup_ratios_for_nans(self, tcs_base, nb, cfgcm_test):
+        """Test `get_backup_ratios_for_nans`.
+
+        Implicitly tests `get_annually_averaged_ratios`.
+        """
         # get_backup_ratios_for_nans is run by __init__.
         matcher_ = mt.MatcherBase(tcs_base, nb, cfg=cfgcm_test)
 
         for ptc in tcs_base.ptcs.values():
             if ptc.ratios['N_avail_days'].isnull().any(axis=None):
-                assert set(['DoM_i', 'D_i']).issubset(
-                    set(ptc.ratios.keys()))
+                for year in ptc.perm_years:
+                    assert (ptc.ratios['DoM_i'].at[year, 'DoM_i'] ==
+                            mt.nanaverage(
+                                ptc.ratios['DoM_ijd'].loc[year].values,
+                                ptc.ratios['N_avail_days'].loc[year].values))
+                    # Currently using medians rather than means.
+                    assert (ptc.ratios['D_i'].at[year, 'D_i'] ==
+                            ptc.ratios['D_ijd'].loc[year].unstack().median())
             else:
-                assert 'DoM_i' not in ptc.ratios.keys()
-                assert 'D_i' not in ptc.ratios.keys()
+                assert not (set(['DoM_i', 'D_i', 'avail_years'])
+                            .intersection(set(ptc.ratios.keys())))
+
+    @staticmethod
+    def get_available_years(df_N):
+        """Create a dataframe of permanent years where ratios are available."""
+        # Old version from countmatch.matcher.
+        avail_years = []
+        month = []
+        for name, group in (df_N.notnull().groupby('Month')):
+            gd = group.reset_index(level='Month', drop=True)
+            avail_years.append([list(gd.loc[gd[c]].index.values)
+                                for c in group.columns])
+            month.append(name)
+        return pd.DataFrame(avail_years, index=month)
+
+    @hyp.given(n_nan=hyp.strategies.integers(min_value=5, max_value=20))
+    @hyp.settings(max_examples=30)
+    def test_get_available_years(self, tcs_ref, n_nan):
+        """Fuzz test for `get_available_years`."""
+        # -104870 is the only SAMPLE_ZIP PTC with >1 yr of perm count data.
+        df = tcs_ref.ptcs[-104870].ratios['N_avail_days']
+
+        # Randomly drop available days.
+        arr = df.values.flatten()
+        nan_indices = np.random.choice(np.arange(arr.size),
+                                       size=n_nan, replace=False)
+        arr[nan_indices] = np.nan
+        df_N = pd.DataFrame(arr.reshape(df.shape), index=df.index,
+                            columns=df.columns)
+
+        # Curiously, this breaks if the elements of avail_years are arrays
+        # rather than lists; in the latter case, we'd have to loop over
+        # elements.
+        assert self.get_available_years(df_N).equals(
+            mt.MatcherBase.get_available_years(df_N))
