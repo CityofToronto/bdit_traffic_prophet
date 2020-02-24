@@ -64,7 +64,7 @@ def nanaverage(x, weights=None):
 
 class MatcherBase(metaclass=MatcherRegistrar):
 
-    _average_growth_rate = None
+    _average_growth_factor = None
 
     def __init__(self, tcs, nb, cfg=cfg.cm):
         self.tcs = tcs
@@ -77,7 +77,7 @@ class MatcherBase(metaclass=MatcherRegistrar):
         self.get_backup_ratios_for_nans()
 
         if self.cfg['average_growth']:
-            self._average_growth_rate = self.get_average_growth()
+            self._average_growth_factor = self.get_average_growth()
 
         self._disable_tqdm = not self.cfg['verbose']
 
@@ -189,10 +189,8 @@ class MatcherBase(metaclass=MatcherRegistrar):
             self.tcs.ptcs[n] for n in neighbour_ids
             if n in self.tcs.ptcs.keys()][:self.cfg['n_neighbours']]
 
-        # For bi-directional matching, 2 * n_neighbours PTCs are returned.
-        neigh_multiplier = 1 if self.cfg['match_single_direction'] else 2
-        if len(neighbour_ptcs) != neigh_multiplier * self.cfg['n_neighbours']:
-            raise ValueError("invalid number of available PTC locations "
+        if len(neighbour_ptcs) < self.cfg['n_neighbours']:
+            raise ValueError("too few available PTC locations "
                              "for {0}".format(tc.count_id))
 
         return neighbour_ptcs
@@ -210,13 +208,13 @@ class MatcherBase(metaclass=MatcherRegistrar):
         return ptc_years[np.argmin(abs(sttc_years - ptc_years))]
 
     def ratio_lookup(self, sttc_row, ptc, default_closest_years):
+        """Closest match lookup of DoM_ijd and d_ijd ratios for STTC row."""
+        # Try extracting DoM_ijd from closest year and same month/DoW.
         closest_year = default_closest_years[sttc_row['STTC Year']]
         loc = ((closest_year, sttc_row['Month']), sttc_row['Day of Week'])
-
-        # Try extracting DoM_ijd.
         dom_ijd = ptc.ratios['DoM_ijd'].at[loc]
 
-        # If not available, find a substitute.
+        # If this is not available, find a substitute.
         if np.isnan(dom_ijd):
             avail_years = ptc.ratios['avail_years'].at[
                 sttc_row['Month'], sttc_row['Day of Week']]
@@ -240,7 +238,7 @@ class MatcherBase(metaclass=MatcherRegistrar):
                        sttc_row['Day of Week'])
                 dom_ijd = ptc.ratios['DoM_ijd'].at[loc]
 
-        # Get d_ijd
+        # Get d_ijd as well.
         d_ijd = ptc.ratios['D_ijd'].at[loc]
         return closest_year, dom_ijd, d_ijd
 
@@ -272,7 +270,7 @@ class MatcherBase(metaclass=MatcherRegistrar):
             # is a view).
             ijd = sttc_timeinfo
 
-        # Get a lookup
+        # Get a lookup table assuming all PTC permanent years are available.
         sttc_years = ijd['STTC Year'].unique()
         default_closest_years = dict(zip(
             sttc_years, self.get_closest_year(sttc_years, ptc.perm_years)))
@@ -310,9 +308,9 @@ class MatcherBase(metaclass=MatcherRegistrar):
 
         """
         mvals = self.get_ratio_from_ptc(sttc, ptc)
-        # Python is beautiful: self._average_growth_rate doesn't need to be
+        # Python is beautiful: self._average_growth_factor doesn't need to be
         # defined unless self.cfg['average_growth'] is False.
-        growth_factor = (self._average_growth_rate
+        growth_factor = (self._average_growth_factor
                          if self.cfg['average_growth'] else ptc.growth_factor)
 
         if not np.array_equal(sttc.data.index.values, mvals.index.values):
@@ -381,7 +379,7 @@ class MatcherBase(metaclass=MatcherRegistrar):
 
     def estimate_ptc_aadt(self, ptc, want_year):
         closest_year = self.get_closest_year(want_year, ptc.perm_years)
-        growth_factor = (self._average_growth_rate
+        growth_factor = (self._average_growth_factor
                          if self.cfg['average_growth'] else
                          ptc.growth_factor)
         aadt_estimate = (ptc.adts['AADT'].loc[closest_year, 'AADT'] *
