@@ -144,5 +144,5 @@ def get_ptcs_sttcs(tcs, cfg=cfg.cm):
                              **cfg['derived_vals_settings'])
     gf_calc = gf.GrowthFactor(cfg['growth_factor_calculator'],
                               **cfg['growth_factor_settings'])
-    ptcproc = PermCountProcessor(dv_calc, gf_calc)
+    ptcproc = PermCountProcessor(dv_calc, gf_calc, cfg=cfg)
     ptcproc.get_ptcs_sttcs(tcs)

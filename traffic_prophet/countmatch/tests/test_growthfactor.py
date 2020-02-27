@@ -128,7 +128,7 @@ class TestGrowthFactorAADTExp:
 
         assert np.isclose(ptc_multiyear._growth_fit["growth_factor"],
                           np.exp(fit_ref.params[0]))
-        assert (ptc_multiyear.growth_factor == 
+        assert (ptc_multiyear.growth_factor ==
                 ptc_multiyear._growth_fit["growth_factor"])
 
 

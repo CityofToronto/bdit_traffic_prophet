@@ -23,7 +23,9 @@ cm = {
     'growth_factor_settings': {},
     'n_neighbours': 5,
     'match_single_direction': True,
-    'average_growth': True
+    'average_growth': True,
+    'matcher': 'Standard',
+    'matcher_settings': {}
 }
 
 distances = {

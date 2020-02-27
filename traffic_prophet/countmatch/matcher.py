@@ -280,15 +280,13 @@ class MatcherBase(metaclass=MatcherRegistrar):
         for _, row in ijd.iterrows():
             ptc_vals.append(self.ratio_lookup(
                 row, ptc, default_closest_years))
-        # `index=ijd.index` doesn't do anything when merging is used, but
-        # allows pd.concat to work properly when it isn't.
+        # `index=ijd.index` pd.concat to work properly when merging isn't used.
         ptc_vals = pd.DataFrame(
             ptc_vals, index=ijd.index,
             columns=['Closest PTC Year', 'DoM_ijd', 'D_ijd'])
         ratios = pd.concat([ijd, ptc_vals], axis=1)
 
         if use_merge:
-            # Merge back with `sttc_timeinfo` to assign ratios to each row.
             ratios = (pd.merge(sttc_timeinfo, ratios, how='left',
                                left_on=('STTC Year', 'Month', 'Day of Week'),
                                right_on=('STTC Year', 'Month', 'Day of Week'))
@@ -317,9 +315,10 @@ class MatcherBase(metaclass=MatcherRegistrar):
             raise ValueError("sttc and mvals indices don't match!")
 
         # Eqn. 2 Bagheri.
+        year_diff = want_year - mvals['STTC Year'].values
         mvals['MADT_est'] = (
             sttc.data['Daily Count'].values * mvals['DoM_ijd'].values *
-            growth_factor**(want_year - mvals['STTC Year'].values))
+            growth_factor**year_diff)
 
         mpattern = pd.DataFrame(
             {'MADT_est': mvals.groupby('Month')['MADT_est'].mean()})
@@ -327,7 +326,7 @@ class MatcherBase(metaclass=MatcherRegistrar):
         # Eqn. 3 Bagheri.
         mpattern['AADT_est'] = (
             sttc.data['Daily Count'].values * mvals['D_ijd'].values *
-            growth_factor**(want_year - mvals['STTC Year'].values)).mean()
+            growth_factor**year_diff).mean()
 
         # Eqn. 5 Bagheri.
         mpattern['MF_STTC'] = (mpattern['MADT_est'].values /
@@ -341,6 +340,18 @@ class MatcherBase(metaclass=MatcherRegistrar):
                 'Monthly Pattern': mpattern}
 
     def estimate_mse(self, mpattern, ptc, want_year):
+        """Estimate MSE between PTC and STTC monthly pattern.
+
+        Parameters
+        ----------
+        mpattern : pandas.DataFrame
+            'Monthly Pattern' output of `get_monthly_pattern`.
+        ptc : permcount.PermCount
+            Permanent count.
+        want_year : int
+            Year of analysis.
+
+        """
         ptc_closest_year = self.get_closest_year(want_year, ptc.perm_years)
         # No need to use a growth factor, since it's canceled out by the
         # normalization.
@@ -348,14 +359,29 @@ class MatcherBase(metaclass=MatcherRegistrar):
             ptc.adts['MADT'].loc[ptc_closest_year, 'MADT'] /
             ptc.adts['AADT'].loc[ptc_closest_year, 'AADT'])
 
+        # `mean` skips NaNs.
         mse = ((mpattern['MF_STTC'] - mf_ptc)**2).mean()
         if mse < sys.float_info.epsilon:
             mse = 0.
 
-        return mf_ptc, mse
+        return mse
 
     def get_mmse_aadt(self, tc_data, mmse_mvals, mmse_growth_factor,
                       want_year):
+        """Obtain AADT based on minimum MSE match.
+
+        Parameters
+        ----------
+        tc_data : pandas.DataFrame
+            STTC daily counts.
+        mmse_mvals : pandas.DataFrame
+            'Match Values' from `get_monthly_pattern` with MSE matching PTC.
+        mmse_growth_factor : float
+            Growth factor.
+        want_year : int
+            Year of analysis.
+
+        """
         # TO DO: there are definitely cases where years before the closest year
         # have way more data - surely there's a better way of doing this?
         mmse_closest_year = self.get_closest_year(
@@ -391,23 +417,25 @@ class MatcherBase(metaclass=MatcherRegistrar):
         sttc_aadt_ests = []
         for tc in tqdm(self.tcs.sttcs.values(),
                        desc='Estimating STTC AADTs',
-                       disable=(not self._disable_tqdm)):
-            sttc_aadt_ests.append(self.estimate_sttc_aadt(tc, want_year))
+                       disable=self._disable_tqdm):
+            sttc_aadt_ests.append(
+                (tc.count_id, self.estimate_sttc_aadt(tc, want_year)))
 
         # Process PTC AADT estimates.
         ptc_aadt_ests = []
         for ptc in tqdm(self.tcs.ptcs.values(),
                         desc='Estimating PTC AADTs',
-                        disable=(not self._disable_tqdm)):
-            ptc_aadt_ests.append(self.estimate_ptc_aadt(ptc, want_year))
+                        disable=self._disable_tqdm):
+            ptc_aadt_ests.append(
+                (ptc.count_id, self.estimate_ptc_aadt(ptc, want_year)))
 
         sttc_aadt_ests = (pd.DataFrame(
             sttc_aadt_ests, columns=('Count ID', 'AADT Estimate'))
-            .sort_values(by='Count ID', axis=1).reset_index(drop=True))
+            .sort_values(by='Count ID').reset_index(drop=True))
 
         ptc_aadt_ests = (pd.DataFrame(
             ptc_aadt_ests, columns=('Count ID', 'AADT Estimate'))
-            .sort_values(by='Count ID', axis=1).reset_index(drop=True))
+            .sort_values(by='Count ID').reset_index(drop=True))
 
         return sttc_aadt_ests, ptc_aadt_ests
 
@@ -428,21 +456,21 @@ class MatcherStandard(MatcherBase):
         for ptc in neighbour_ptcs:
             tc.mpatterns[ptc.count_id] = self.get_monthly_pattern(tc, ptc,
                                                                   want_year)
-            mses.append((ptc.count_id,) + self.estimate_mse(
+            mses.append((ptc.count_id, self.estimate_mse(
                 tc.mpatterns[ptc.count_id]['Monthly Pattern'], ptc, want_year))
+            )
         tc.mses = pd.DataFrame(mses, columns=['Count ID', 'MSE'])
 
         # Find the smallest MSE (in case of ties, first index (closer distance)
-        # is chosen).
+        # is chosen).  A bit clunkier than setting the index to 'Count ID' to
+        # keep its design closer to MatcherBagheri.
         mmse_count_id = tc.mses.at[tc.mses['MSE'].idxmin(), 'Count ID']
-        # Extract necessary values from `tc.mpatterns`.
-        mmse_mvals = tc.mpatterns[mmse_count_id]['Match Values']
-        mmse_growth_factor = tc.mpatterns[mmse_count_id]['Growth Factor']
 
-        aadt_est = self.get_mmse_aadt(tc.data, mmse_mvals, mmse_growth_factor,
-                                      want_year)
+        aadt_est = self.get_mmse_aadt(
+            tc.data, tc.mpatterns[mmse_count_id]['Match Values'],
+            tc.mpatterns[mmse_count_id]['Growth Factor'], want_year)
 
-        return tc.count_id, aadt_est
+        return aadt_est
 
 
 class MatcherBagheri(MatcherBase):
@@ -452,20 +480,20 @@ class MatcherBagheri(MatcherBase):
     def __init__(self, tcs, nb, err_measure='MSE', cfg=cfg.cm):
         assert err_measure in ('MSE', 'COV'), "unrecognized err_measure!"
         if err_measure == 'COV':
-            self._err_func = self.estimate_mse
-        else:
             self._err_func = self.estimate_cov
+        else:
+            self._err_func = self.estimate_mse
         super().__init__(tcs, nb, cfg=cfg)
 
     def estimate_cov(self, mpattern, ptc, want_year):
         ptc_closest_year = self.get_closest_year(want_year, ptc.perm_years)
         ptc_madt = ptc.adts['MADT'].loc[ptc_closest_year, 'MADT']
-        ratio = mpattern['MF_STTC'] / ptc_madt
+        ratio = mpattern['MADT_est'] / ptc_madt
         # No need to use a growth factor, since it's canceled out in the ratio.
         cov = ratio.std() / ratio.mean()
         if cov < sys.float_info.epsilon:
             cov = 0.
-        return ptc_madt, cov
+        return cov
 
     def estimate_sttc_aadt(self, tc, want_year):
         """Estimate AADT of an STTC."""
@@ -480,8 +508,8 @@ class MatcherBagheri(MatcherBase):
 
         mses = []
         for ptc in neighbour_ptcs:
-            mses.append((ptc.count_id,) + self._err_func(
-                baseline_mpattern, ptc, want_year))
+            mses.append((ptc.count_id, self._err_func(
+                baseline_mpattern['Monthly Pattern'], ptc, want_year)))
         tc.mses = pd.DataFrame(mses, columns=['Count ID', 'MSE'])
 
         # Find the smallest MSE (in case of ties, first index (closer distance)
@@ -501,4 +529,10 @@ class MatcherBagheri(MatcherBase):
         aadt_est = self.get_mmse_aadt(tc.data, mmse_mvals, mmse_growth_factor,
                                       want_year)
 
-        return tc.count_id, aadt_est
+        return aadt_est
+
+
+def match(tcs, nb, want_year, cfg=cfg.cm):
+    matcher = Matcher(cfg['matcher'], tcs, nb,
+                      cfg=cfg, **cfg['matcher_settings'])
+    return matcher.estimate_aadts(want_year)
