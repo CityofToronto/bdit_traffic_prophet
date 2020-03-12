@@ -106,7 +106,7 @@ class TestMatcherBase:
         assert matcher.tcs is tcs_base
         assert matcher.cfg is cfgcm_test
         assert matcher.nb is nb
-        assert matcher._average_growth_factor is not None
+        assert matcher.average_growth_factor is not None
         assert matcher._disable_tqdm is not cfgcm_test['verbose']
 
     def test_get_sttc_date_columns(self, mt_ref):
@@ -168,7 +168,7 @@ class TestMatcherBase:
             mt.MatcherBase.get_available_years(df_N))
 
     def test_get_average_growth(self, mt_ref):
-        assert mt_ref._average_growth_factor == np.mean([
+        assert mt_ref.average_growth_factor == np.mean([
             mt_ref.tcs.ptcs[-890].growth_factor,
             mt_ref.tcs.ptcs[-104870].growth_factor])
 
@@ -360,7 +360,7 @@ class TestMatcherBase:
         # Also check that we can predict future years at all.
         mt_ref.cfg['average_growth'] = True
         mpout = mt_ref.get_monthly_pattern(sttc, ptc, 2016)
-        assert mpout['Growth Factor'] == mt_ref._average_growth_factor
+        assert mpout['Growth Factor'] == mt_ref.average_growth_factor
 
     @pytest.mark.parametrize(
         ('sttc_id', 'ptc_id', 'want_year'),
@@ -392,11 +392,11 @@ class TestMatcherBase:
         aadt_est_ref = (
             sttc.data['Daily Count'].loc[closest_year, :].values *
             mpout['Match Values']['D_ijd'].loc[closest_year, :].values *
-            mt_ref._average_growth_factor**(want_year - closest_year)).mean()
+            mt_ref.average_growth_factor**(want_year - closest_year)).mean()
 
         assert np.isclose(aadt_est_ref, mt_ref.get_mmse_aadt(
             sttc.data, mpout['Match Values'],
-            mt_ref._average_growth_factor, want_year), rtol=1e-8)
+            mt_ref.average_growth_factor, want_year), rtol=1e-8)
 
     @pytest.mark.parametrize(
         ('ptc_id', 'want_year'),
@@ -418,7 +418,7 @@ class TestMatcherBase:
         mt_ref.cfg['average_growth'] = True
         aadt_est_ref = (
             ptc.adts['AADT'].loc[closest_year, 'AADT'] *
-            mt_ref._average_growth_factor**(want_year - closest_year))
+            mt_ref.average_growth_factor**(want_year - closest_year))
 
         assert np.isclose(aadt_est_ref,
                           mt_ref.estimate_ptc_aadt(ptc, want_year),
@@ -456,7 +456,7 @@ class TestMatcherStandard:
         minmse_id = tc.mses.at[tc.mses['MSE'].idxmin(), 'Count ID']
         aadt_est_ref = mt_base.get_mmse_aadt(
             tc.data, tc.mpatterns[minmse_id]['Match Values'],
-            mt_base._average_growth_factor, want_year)
+            mt_base.average_growth_factor, want_year)
         assert aadt_est == aadt_est_ref
 
     def test_estimate_aadts(self, mt_base):
@@ -537,7 +537,7 @@ class TestMatcherBagheri:
 
         # Make sure MSE was calculated using closest PTC.
         closest_ptc_id = matcher.get_neighbour_ptcs(tc)[0].count_id
-        for i, row in tc.mses.iterrows():
+        for _, row in tc.mses.iterrows():
             assert np.isclose(
                 row['MSE'], matcher._err_func(
                     tc.mpatterns[closest_ptc_id]['Monthly Pattern'],
@@ -548,5 +548,5 @@ class TestMatcherBagheri:
         minmse_id = tc.mses.at[tc.mses['MSE'].idxmin(), 'Count ID']
         aadt_est_ref = matcher.get_mmse_aadt(
             tc.data, tc.mpatterns[minmse_id]['Match Values'],
-            matcher._average_growth_factor, want_year)
+            matcher.average_growth_factor, want_year)
         assert aadt_est == aadt_est_ref

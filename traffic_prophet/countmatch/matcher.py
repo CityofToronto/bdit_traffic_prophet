@@ -1,3 +1,5 @@
+"""STTC-PTC matcher and AADT estimator classes."""
+
 import numpy as np
 import pandas as pd
 import sys
@@ -35,6 +37,7 @@ class MatcherRegistrar(type):
 
 
 class Matcher:
+    """Base class for matchers."""
 
     def __new__(cls, matcher_type, *args, **kwargs):
         # __init__ has to be called manually!
@@ -81,6 +84,11 @@ class MatcherBase(metaclass=MatcherRegistrar):
 
         self._disable_tqdm = not self.cfg['verbose']
 
+    @property
+    def average_growth_factor(self):
+        """Mean growth factor averaged over all PTCs."""
+        return self._average_growth_factor
+
     def get_sttc_date_columns(self):
         """Append year, month and day of week columns to STTC data.
 
@@ -100,7 +108,7 @@ class MatcherBase(metaclass=MatcherRegistrar):
                 self.get_annually_averaged_ratios(ptc)
 
     def get_annually_averaged_ratios(self, ptc):
-        """Annually averaged versions of DoM_ijd and D_ijd.
+        """Annually averaged versions of `DoM_ijd` and `D_ijd`.
 
         Only useful when there are NaNs in the ratio matrices.
 
@@ -115,6 +123,7 @@ class MatcherBase(metaclass=MatcherRegistrar):
         idx = pd.Index(ptc.perm_years, name='Year')
 
         # TO DO: consider using the median for DoM_i, as well as for D_i.
+        # Will come back to this when resolving #30.
         for i, pyear in enumerate(ptc.perm_years):
             dom_i[i] = nanaverage(
                 ptc.ratios['DoM_ijd'].loc[pyear].values,
@@ -141,8 +150,8 @@ class MatcherBase(metaclass=MatcherRegistrar):
 
         Returns
         -------
-        avail_years : pd.DataFrame
-            Data frame where rows are months, columns are day of week and
+        avail_years : pandas.DataFrame
+            DataFrame where rows are months, columns are day of week and
             values are lists of available permanent count years for each
             month / day of week.
 
@@ -155,6 +164,7 @@ class MatcherBase(metaclass=MatcherRegistrar):
                 # pd.Series.unique returns unsorted.  Conversion to list
                 # because pandas cannot fill NaNs with arrays.
                 .apply(lambda x: sorted(list(x.unique())))
+                # `ratio_lookup` checks if values are available using `len()`.
                 .unstack(fill_value=[]))
 
     def get_average_growth(self, multi_year=False):
@@ -175,16 +185,17 @@ class MatcherBase(metaclass=MatcherRegistrar):
 
         """
         neighbours = self.nb.get_neighbours(tc.centreline_id)[0]
-        if self.cfg['match_single_direction']:
-            # Need to match all neighbours, since not every PTC is
-            # bidirectional.
-            neighbour_ids = [tc.direction * nbrs for nbrs in neighbours]
-        else:
-            # Since any direction is valid, can truncate at n_neighbours.
-            neighbour_ids = (
-                [-nbrs for nbrs in neighbours[:self.cfg['n_neighbours']]] +
-                neighbours[:self.cfg['n_neighbours']])
-        # Slicing won't do anything for bi-directional matching.
+
+        # Need to match all neighbours, since not every PTC is
+        # bidirectional.
+        neighbour_ids = [tc.direction * nbrs for nbrs in neighbours]
+        if not self.cfg['match_single_direction']:
+            # Interleave same and opposite direction counts (with a preference
+            # for same direction).  Not all of these will be PTCs, hence the
+            # next step below.
+            neighbour_ids = [cid for cid_sd in neighbour_ids
+                             for cid in (cid_sd, -cid_sd)]
+
         neighbour_ptcs = [
             self.tcs.ptcs[n] for n in neighbour_ids
             if n in self.tcs.ptcs.keys()][:self.cfg['n_neighbours']]
@@ -208,7 +219,7 @@ class MatcherBase(metaclass=MatcherRegistrar):
         return ptc_years[np.argmin(abs(sttc_years - ptc_years))]
 
     def ratio_lookup(self, sttc_row, ptc, default_closest_years):
-        """Closest match lookup of DoM_ijd and d_ijd ratios for STTC row."""
+        """Find closest match `DoM_ijd` and `D_ijd` ratios for STTC row."""
         # Try extracting DoM_ijd from closest year and same month/DoW.
         closest_year = default_closest_years[sttc_row['STTC Year']]
         loc = ((closest_year, sttc_row['Month']), sttc_row['Day of Week'])
@@ -276,11 +287,10 @@ class MatcherBase(metaclass=MatcherRegistrar):
             sttc_years, self.get_closest_year(sttc_years, ptc.perm_years)))
 
         # Row-by-row search for matching PTC values.
-        ptc_vals = []
-        for _, row in ijd.iterrows():
-            ptc_vals.append(self.ratio_lookup(
-                row, ptc, default_closest_years))
-        # `index=ijd.index` pd.concat to work properly when merging isn't used.
+        ptc_vals = [self.ratio_lookup(row, ptc, default_closest_years)
+                    for _, row in ijd.iterrows()]
+        # `index=ijd.index` allows pd.concat to work properly when merging
+        # isn't used.
         ptc_vals = pd.DataFrame(
             ptc_vals, index=ijd.index,
             columns=['Closest PTC Year', 'DoM_ijd', 'D_ijd'])
@@ -306,9 +316,9 @@ class MatcherBase(metaclass=MatcherRegistrar):
 
         """
         mvals = self.get_ratio_from_ptc(sttc, ptc)
-        # Python is beautiful: self._average_growth_factor doesn't need to be
+        # Python is beautiful: self.average_growth_factor doesn't need to be
         # defined unless self.cfg['average_growth'] is False.
-        growth_factor = (self._average_growth_factor
+        growth_factor = (self.average_growth_factor
                          if self.cfg['average_growth'] else ptc.growth_factor)
 
         if not np.array_equal(sttc.data.index.values, mvals.index.values):
@@ -404,8 +414,18 @@ class MatcherBase(metaclass=MatcherRegistrar):
         raise NotImplementedError
 
     def estimate_ptc_aadt(self, ptc, want_year):
+        """Estimates AADT of a PTC.
+
+        Parameters
+        ----------
+        ptc : permcount.PermCount
+            Permanent count.
+        want_year : int
+            Year of analysis.
+
+        """
         closest_year = self.get_closest_year(want_year, ptc.perm_years)
-        growth_factor = (self._average_growth_factor
+        growth_factor = (self.average_growth_factor
                          if self.cfg['average_growth'] else
                          ptc.growth_factor)
         aadt_estimate = (ptc.adts['AADT'].loc[closest_year, 'AADT'] *
@@ -413,7 +433,14 @@ class MatcherBase(metaclass=MatcherRegistrar):
         return aadt_estimate
 
     def estimate_aadts(self, want_year):
-        # Process STTC AADT estimates.
+        """Estimates AADTs for all PTCs and STTCs.
+
+        Parameters
+        ----------
+        want_year : int
+            Year of analysis.
+
+        """
         sttc_aadt_ests = []
         for tc in tqdm(self.tcs.sttcs.values(),
                        desc='Estimating STTC AADTs',
@@ -441,11 +468,36 @@ class MatcherBase(metaclass=MatcherRegistrar):
 
 
 class MatcherStandard(MatcherBase):
+    """TEPs-based matcher.
+
+    When calculating the MSE between `MF_STTC` and `MF_PTC` from a nearby PTC,
+    uses ratios from that PTC.
+
+    Parameters
+    ---------------
+    tcs : countmatch.reader subclass
+        Reader object containing PTCs and STTCs already processed by
+        `derivedvals` methods.
+    nb : countmatch.neighbour.NeighbourBase subclass
+        Nearest neighbour lookup class.
+    cfg : dict, optional
+        Settings and hyperparameters.  Default: `config.cm`.
+
+    """
 
     _matcher_type = 'Standard'
 
     def estimate_sttc_aadt(self, tc, want_year):
-        """Estimate AADT of an STTC."""
+        """Estimates AADT of an STTC
+
+        Parameters
+        ----------
+        tc : base.Count
+            Short-term count.
+        want_year : int
+            Year of analysis.
+
+        """
 
         neighbour_ptcs = self.get_neighbour_ptcs(tc)
 
@@ -474,7 +526,25 @@ class MatcherStandard(MatcherBase):
 
 
 class MatcherBagheri(MatcherBase):
+    """Bagheri-based matcher.
 
+    When calculating the MSE between `MF_STTC` and `MF_PTC` from a nearby PTC,
+    uses ratios from the closest PTC (there are too few PTCs to use only ones
+    of the same road class as the STTC).
+
+    Parameters
+    ---------------
+    tcs : countmatch.reader subclass
+        Reader object containing PTCs and STTCs already processed by
+        `derivedvals` methods.
+    nb : countmatch.neighbour.NeighbourBase subclass
+        Nearest neighbour lookup class.
+    err_measure : str, optional
+        Measure of error, either 'MSE' or 'COV'.  Default: 'MSE'.
+    cfg : dict, optional
+        Settings and hyperparameters.  Default: `config.cm`.
+
+    """
     _matcher_type = 'Bagheri'
 
     def __init__(self, tcs, nb, err_measure='MSE', cfg=cfg.cm):
@@ -486,6 +556,18 @@ class MatcherBagheri(MatcherBase):
         super().__init__(tcs, nb, cfg=cfg)
 
     def estimate_cov(self, mpattern, ptc, want_year):
+        """Estimate COV between PTC and STTC monthly pattern.
+
+        Parameters
+        ----------
+        mpattern : pandas.DataFrame
+            'Monthly Pattern' output of `get_monthly_pattern`.
+        ptc : permcount.PermCount
+            Permanent count.
+        want_year : int
+            Year of analysis.
+
+        """
         ptc_closest_year = self.get_closest_year(want_year, ptc.perm_years)
         ptc_madt = ptc.adts['MADT'].loc[ptc_closest_year, 'MADT']
         ratio = mpattern['MADT_est'] / ptc_madt
@@ -496,7 +578,16 @@ class MatcherBagheri(MatcherBase):
         return cov
 
     def estimate_sttc_aadt(self, tc, want_year):
-        """Estimate AADT of an STTC."""
+        """Estimates AADT of an STTC
+
+        Parameters
+        ----------
+        tc : base.Count
+            Short-term count.
+        want_year : int
+            Year of analysis.
+
+        """
         neighbour_ptcs = self.get_neighbour_ptcs(tc)
 
         # Store monthly patterns and mean square errors of comparisons with
@@ -519,10 +610,10 @@ class MatcherBagheri(MatcherBase):
         if mmse_id > 0:
             best_mpattern = self.get_monthly_pattern(
                 tc, neighbour_ptcs[mmse_id], want_year)
+            # Save to `tc.mpatterns` for diagonstic purposes.
             tc.mpatterns[neighbour_ptcs[mmse_id].count_id] = best_mpattern
         else:
             best_mpattern = baseline_mpattern
-        # Extract necessary values from `tc.mpatterns`.
         mmse_mvals = best_mpattern['Match Values']
         mmse_growth_factor = best_mpattern['Growth Factor']
 
