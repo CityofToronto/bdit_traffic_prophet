@@ -139,10 +139,10 @@ class PermCountProcessor:
         self.check_processed_count_integrity(tcs)
 
 
-def get_ptcs_sttcs(tcs):
-    dv_calc = dv.DerivedVals(cfg.cm['derived_vals_calculator'],
-                             **cfg.cm['derived_vals_settings'])
-    gf_calc = gf.GrowthFactor(cfg.cm['growth_factor_calculator'],
-                              **cfg.cm['growth_factor_settings'])
-    ptcproc = PermCountProcessor(dv_calc, gf_calc)
+def get_ptcs_sttcs(tcs, cfg=cfg.cm):
+    dv_calc = dv.DerivedVals(cfg['derived_vals_calculator'],
+                             **cfg['derived_vals_settings'])
+    gf_calc = gf.GrowthFactor(cfg['growth_factor_calculator'],
+                              **cfg['growth_factor_settings'])
+    ptcproc = PermCountProcessor(dv_calc, gf_calc, cfg=cfg)
     ptcproc.get_ptcs_sttcs(tcs)

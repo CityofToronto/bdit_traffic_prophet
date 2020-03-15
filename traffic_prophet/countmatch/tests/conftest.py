@@ -29,7 +29,12 @@ def cfgcm_test():
         'growth_factor_calculator': 'Composite',
         'growth_factor_settings': {},
         'min_year': 2006,
-        'max_year': 2018
+        'max_year': 2018,
+        'n_neighbours': 2,
+        'match_single_direction': True,
+        'average_growth': True,
+        'matcher': 'Standard',
+        'matcher_settings': {}
     }
 
 

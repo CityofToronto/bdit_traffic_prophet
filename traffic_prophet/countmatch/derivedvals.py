@@ -124,7 +124,7 @@ class DerivedValsBase(metaclass=DVRegistrar):
             MADT, with 'Days in Month' column as from `get_madt`.
         perm_years : list
             List of permanent count years for location; obtained from
-             PermCount.perm_years.
+            PermCount.perm_years.
 
         Returns
         -------

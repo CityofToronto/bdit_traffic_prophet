@@ -45,7 +45,7 @@ class TestDVRegistrarDerivedVals:
 
 class TestDerivedValsBase:
 
-    @pytest.fixture(params=[-890, -104870])
+    @pytest.fixture(scope='class', params=[-890, -104870])
     def ptc_sample(self, sample_counts, cfgcm_test, request):
         return get_single_ptc(sample_counts, cfgcm_test, request.param)
 
