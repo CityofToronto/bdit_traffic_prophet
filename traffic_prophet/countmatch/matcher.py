@@ -208,10 +208,15 @@ class MatcherBase(metaclass=MatcherRegistrar):
 
     @staticmethod
     def get_closest_year(sttc_years, ptc_years):
-        """Find closest year to an STTC count available at a PTC location."""
+        """Find closest year to an STTC count available at a PTC location.
+
+        In the case of an STTC year being equidistant from two PTC years, the
+        earlier year will be selected.
+        """
         if isinstance(sttc_years, np.ndarray):
             # Outer product to determine absolute difference between
-            # STTC years and PTC years.
+            # STTC years and PTC years.  Earlier of two equidistant years is
+            # selected because `ptc_years` is ordered.
             mindiff_arg = np.argmin(abs(sttc_years[:, np.newaxis] - ptc_years),
                                     axis=1)
             return ptc_years[mindiff_arg]

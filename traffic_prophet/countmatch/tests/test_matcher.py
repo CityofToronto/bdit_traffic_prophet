@@ -40,6 +40,7 @@ def tcs_ref(cfgcm_test):
 def test_nanaverage(nulls, weights):
     x = np.arange(10, dtype=float)
     x[nulls] = np.nan
+    weights[nulls] = np.nan
     # If every value is NaN, we expect `nanaverage` to raise an error.
     if nulls.sum() == 10:
         with pytest.raises(ZeroDivisionError):
@@ -60,6 +61,7 @@ class TestMatcherRegistrarMatcher:
 
         assert mt.MATCHER_REGISTRY['Testing'] is MatcherBagheriTest
         matcher_instance = mt.Matcher('Testing', tcs_ref, nb)
+        assert isinstance(matcher_instance, MatcherBagheriTest)
         assert matcher_instance._matcher_type == 'Testing'
 
         # Pop the dummy class, in case we test twice.
@@ -243,7 +245,8 @@ class TestMatcherBase:
             [2010, 2012],
             mt_ref.get_closest_year(np.array([2010, 2012]), ptc.perm_years)))
 
-        # Set idx, col to correct lookup for the lone NaN in -104870.
+        # Set idx, col to correct lookup for the lone NaN in -104870.  We have
+        # to account for this since the test is randomized.
         if (idx, col) == (4, 4):
             idx = 16
             sttc_year = 2012
@@ -357,11 +360,6 @@ class TestMatcherBase:
         assert np.array_equal(np.sort(mpout['Monthly Pattern'].index.values),
                               np.sort(sttc.data['Month'].unique()))
 
-        # Also check that we can predict future years at all.
-        mt_ref.cfg['average_growth'] = True
-        mpout = mt_ref.get_monthly_pattern(sttc, ptc, 2016)
-        assert mpout['Growth Factor'] == mt_ref.average_growth_factor
-
     @pytest.mark.parametrize(
         ('sttc_id', 'ptc_id', 'want_year'),
         [(-241, -104870, 2011), (-1978, -104870, 2014), (-252, -890, 2008)])
@@ -388,15 +386,18 @@ class TestMatcherBase:
         ptc = mt_ref.tcs.ptcs[ptc_id]
         mpout = mt_ref.get_monthly_pattern(sttc, ptc, want_year)
 
-        closest_year = mt_ref.get_closest_year(want_year, ptc.perm_years)
+        closest_year = mt_ref.get_closest_year(
+            want_year, sttc.data.index.levels[0].values)
         aadt_est_ref = (
             sttc.data['Daily Count'].loc[closest_year, :].values *
             mpout['Match Values']['D_ijd'].loc[closest_year, :].values *
             mt_ref.average_growth_factor**(want_year - closest_year)).mean()
 
-        assert np.isclose(aadt_est_ref, mt_ref.get_mmse_aadt(
-            sttc.data, mpout['Match Values'],
-            mt_ref.average_growth_factor, want_year), rtol=1e-8)
+        assert np.isclose(
+            aadt_est_ref,
+            mt_ref.get_mmse_aadt(sttc.data, mpout['Match Values'],
+                                 mt_ref.average_growth_factor, want_year),
+            rtol=1e-8)
 
     @pytest.mark.parametrize(
         ('ptc_id', 'want_year'),
@@ -415,6 +416,7 @@ class TestMatcherBase:
                           mt_ref.estimate_ptc_aadt(ptc, want_year),
                           rtol=1e-8)
 
+        # Try again, with average growth on.
         mt_ref.cfg['average_growth'] = True
         aadt_est_ref = (
             ptc.adts['AADT'].loc[closest_year, 'AADT'] *
@@ -431,8 +433,7 @@ class TestMatcherStandard:
     @pytest.fixture
     def mt_base(self, nb, cfgcm_test):
         tcs = get_tcs(cfgcm_test)
-        # These currently don't have enough neighbours even in the case of
-        # 'match_single_direction' = False.
+        # Remove since 'match_single_direction' is True.
         del tcs.sttcs[170]
         del tcs.sttcs[104870]
         return mt.MatcherStandard(tcs, nb, cfg=cfgcm_test)
@@ -441,8 +442,7 @@ class TestMatcherStandard:
         ('sttc_id', 'want_year'),
         [(-241, 2011), (-1978, 2014), (-410, 2008)])
     def test_estimate_sttc_aadt(self, mt_base, sttc_id, want_year):
-        # Currently, just check that we're populating values inside of the
-        # STTC, since the functions themselves are tested in `TestMatcherBase`.
+        # We won't re-test functions already checked in `TestMatcherBase`.
         tc = mt_base.tcs.sttcs[sttc_id]
         aadt_est = mt_base.estimate_sttc_aadt(tc, want_year)
 
@@ -489,8 +489,7 @@ class TestMatcherBagheri:
     @pytest.fixture
     def mt_tcs(self, cfgcm_test):
         tcs = get_tcs(cfgcm_test)
-        # These currently don't have enough neighbours even in the case of
-        # 'match_single_direction' = False.
+        # Remove since 'match_single_direction' is True.
         del tcs.sttcs[170]
         del tcs.sttcs[104870]
         return tcs
@@ -527,13 +526,10 @@ class TestMatcherBagheri:
         tc = matcher.tcs.sttcs[sttc_id]
         aadt_est = matcher.estimate_sttc_aadt(tc, want_year)
 
-        minmse_idx = tc.mses['MSE'].idxmin()
-        minmse_id = tc.mses.at[minmse_idx, 'Count ID']
-
         assert hasattr(tc, 'mpatterns')
         assert hasattr(tc, 'mses')
-        assert len(tc.mpatterns.keys()) == 2 if minmse_idx > 0 else 1
-        assert minmse_id in tc.mses['Count ID'].values
+        assert (len(tc.mpatterns.keys()) ==
+                2 if tc.mses['MSE'].idxmin() > 0 else 1)
 
         # Make sure MSE was calculated using closest PTC.
         closest_ptc_id = matcher.get_neighbour_ptcs(tc)[0].count_id
