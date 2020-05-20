@@ -131,12 +131,12 @@ class NeighbourLonLatBase(NeighbourBase):
 
 class NeighbourLonLatEuclidean(NeighbourLonLatBase):
 
-    _metric = skln.dist_metrics.EuclideanDistance()
+    _metric = skln.DistanceMetric.get_metric('euclidean')
 
 
 class NeighbourLonLatManhattan(NeighbourLonLatBase):
 
-    _metric = skln.dist_metrics.ManhattanDistance()
+    _metric = skln.DistanceMetric.get_metric('manhattan')
 
     def get_rotation_matrix(self):
         """2D rotation matrix.
