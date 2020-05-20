@@ -49,7 +49,7 @@ class TestNeighbourLonLatEuclidean:
     def test_findneighbours(self):
         # Check that we're using the correct metric.
         assert isinstance(self.nle._metric,
-                          skln.dist_metrics.EuclideanDistance)
+                          skln._dist_metrics.EuclideanDistance)
 
         # Manually calculate pair-pair distances.
         xy = self.nle.get_xy(self.nle.data['Lon'].values,
@@ -105,7 +105,7 @@ class TestNeighbourLonLatManhattan:
     def test_getneighbours(self):
         # Check that we're using the correct metric.
         assert isinstance(self.nlm._metric,
-                          skln.dist_metrics.ManhattanDistance)
+                          skln._dist_metrics.ManhattanDistance)
 
         # Manually calculate pair-pair distances.
         xy = self.nlm.get_xy(self.nlm.data['Lon'].values,
