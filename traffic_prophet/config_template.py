@@ -2,14 +2,6 @@
 # https://martin-thoma.com/configuration-files-in-python/
 # https://kedro.readthedocs.io/en/latest/04_user_guide/03_configuration.html
 
-# Connection info.
-postgres = {
-    # Path to the ConfigParser configuration file.
-    'cfgfile': {INSERT FILE HERE},
-    # Name of the entry in 'cfgfile' containing Postgres credentials.
-    'pg_name': {INSERT NAME HERE}
-}
-
 # For countmatch.
 cm = {
     'verbose': False,
