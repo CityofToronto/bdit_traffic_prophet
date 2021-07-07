@@ -2,7 +2,15 @@
 # https://martin-thoma.com/configuration-files-in-python/
 # https://kedro.readthedocs.io/en/latest/04_user_guide/03_configuration.html
 
-# For countmatch
+# Connection info.
+postgres = {
+    # Path to the ConfigParser configuration file.
+    'cfgfile': {INSERT FILE HERE},
+    # Name of the entry in 'cfgfile' containing Postgres credentials.
+    'pg_name': {INSERT NAME HERE}
+}
+
+# For countmatch.
 cm = {
     'verbose': False,
     'min_year': 2006,
@@ -28,6 +36,7 @@ cm = {
     'matcher_settings': {}
 }
 
+# For calculating nearest neighbours in countmatch.neighbour.
 distances = {
     # Lat-lon of 703 Don Mills.
     'centre_of_toronto': [-79.333536, 43.708975],
