@@ -22,25 +22,6 @@ review, a number of development and experimental notebooks in a `sandbox`
 folder, utilities for working with TEPS and scripts for helping to generate
 input data for the model.
 
-
-## Requirements
-
-As given by `requirements.txt`, the Traffic Prophet codebase requires:
-
-```
-hypothesis>=5.5.4
-numpy>=1.18
-pandas>=1.0
-psycopg2>=2.8.4
-pytest>=5.4
-scikit-learn>=0.22
-statsmodels>=0.11.1
-tqdm>=4.43
-```
-
-Individual Jupyter notebooks in `sandbox` may require other packages (including
-`notebook` to actually run Jupyter notebooks, of course).
-
 ## Folder Structure
 
 - `input_data` - scripts to produce input data tables on Postgres.
@@ -73,9 +54,42 @@ Individual Jupyter notebooks in `sandbox` may require other packages (including
 - `data/` - sample data used in test suites. See `__init__.py` for definitions.
 - `tests/` - integration testing for the entire volume model. Currently empty.
 
+## Requirements
+
+As given by `requirements.txt`, the Traffic Prophet codebase requires:
+
+```
+hypothesis>=5.5.4
+numpy>=1.18
+pandas>=1.0
+psycopg2>=2.8.4
+pytest>=5.4
+scikit-learn>=0.22
+statsmodels>=0.11.1
+tqdm>=4.43
+```
+
+Individual Jupyter notebooks in `sandbox` may require other packages (including
+`notebook` to actually run Jupyter notebooks, of course).
+
 ## Usage
 
 ### Installation
+
+`traffic_prophet` itself only requires a Python environment with the packages
+listed above. It, however, also relies on input data from Postgres (or zip
+files, but this is a legacy ingestion method developed for testing against
+TEPS). The required Postgres tables are:
+
+```
+prj_volume.tp_centreline_lonlat.sql
+prj_volume.tp_centreline_volumes.sql
+prj_volume.tp_daily_volumes.sql
+```
+
+The scripts to create these are located in `input_data/flow`.
+
+### Importing
 
 To import `traffic_prophet`, add this folder to the Python PATH, eg. with
 
