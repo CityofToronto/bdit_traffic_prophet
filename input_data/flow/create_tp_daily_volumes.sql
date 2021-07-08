@@ -1,3 +1,5 @@
+-- You must run create_tp_centreline_volumes.sql first.
+
 -- DROP MATERIALIZED VIEW prj_volume.tp_centreline_daily_counts;
 
 CREATE MATERIALIZED VIEW prj_volume.tp_centreline_daily_counts
