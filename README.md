@@ -61,7 +61,7 @@ As given by `requirements.txt`, the Traffic Prophet codebase requires:
 ```
 hypothesis>=5.5.4
 numpy>=1.18
-pandas>=1.0
+pandas>=1.1
 psycopg2>=2.8.4
 pytest>=5.4
 scikit-learn>=0.22
