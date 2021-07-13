@@ -89,6 +89,13 @@ prj_volume.tp_daily_volumes.sql
 
 The scripts to create these are located in `input_data/flow`.
 
+`traffic_prophet` also assumes there to be a user-generated `config.py` file
+inside the `traffic_prophet/` directory. Also in that directory is a
+`config_template.py` file that shows how to create `config.py`.
+
+For a default configuration, simply copy the contents of `config_template.py`
+into a new `config.py` file.
+
 ### Importing
 
 To import `traffic_prophet`, add this folder to the Python PATH, eg. with
