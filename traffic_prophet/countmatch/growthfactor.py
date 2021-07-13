@@ -83,7 +83,7 @@ class GrowthFactorBase(metaclass=GFRegistrar):
 
         # Corrective measure, as dt.week returns the "week ordinal".  See
         # https://stackoverflow.com/a/55890652
-        cdata['Week'] = cdata['Date'].dt.week
+        cdata['Week'] = cdata['Date'].dt.isocalendar().week
         cdata['Month'] = cdata['Date'].dt.month
         invalid_dates = (((cdata['Week'] == 1) & (cdata['Month'] == 12)) |
                          (cdata['Week'] == 53))

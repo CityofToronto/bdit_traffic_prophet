@@ -3,7 +3,7 @@
 import numpy as np
 import pandas as pd
 import sys
-from tqdm.auto import tqdm
+from tqdm import tqdm
 
 from .. import cfg
 

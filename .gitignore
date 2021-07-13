@@ -105,3 +105,10 @@ venv.bak/
 
 # vscode
 .vscode
+
+
+# Configuration file (potentially unique per system).
+traffic_prophet/config.py
+
+# Guard against 15-minute zips being added to the repo.
+15min_*.zip

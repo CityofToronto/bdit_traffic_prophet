@@ -2,7 +2,7 @@
 # https://martin-thoma.com/configuration-files-in-python/
 # https://kedro.readthedocs.io/en/latest/04_user_guide/03_configuration.html
 
-# For countmatch
+# For countmatch.
 cm = {
     'verbose': False,
     'min_year': 2006,
@@ -28,16 +28,11 @@ cm = {
     'matcher_settings': {}
 }
 
+# For calculating nearest neighbours in countmatch.neighbour.
 distances = {
     # Lat-lon of 703 Don Mills.
     'centre_of_toronto': [-79.333536, 43.708975],
     # Counterclockwise angle from due north for Toronto's street grid
     # (measured from Spadina/Lakeshore to Spadina/Dupont), in degres.
     'toronto_street_angle': 16.485518084102
-}
-
-# DO NOT STORE PERSONAL CREDENTIALS HERE!
-postgres = {
-    # Name of database.
-    'database': 'bigdata',
 }

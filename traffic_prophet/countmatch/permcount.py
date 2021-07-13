@@ -1,7 +1,7 @@
 """Sift and process permanent counts."""
 
 import warnings
-from tqdm.auto import tqdm
+from tqdm import tqdm
 
 from . import base
 from . import derivedvals as dv
